@@ -2,18 +2,20 @@
 
 #[phase(syntax)]
 extern crate asm_ext;
-// mod asm_ext;
 
 fn main() {
-	assert_eq!(2, exported_macro!());
-	let mut c = ~0;
-	let b = 123;
-	// println!("{}", 1);
-	unsafe {
-		asm_format!(volatile, rax,
-			"mov rax, {a:r};"
-			"add rax, {a:i}", /*"{r0}" = 1 -> 2,*/ a = 123 -> c)
-		asm!("nop")
-		println!("{}", c)
-	}
+    let mut c = 0;
+    let b = 13;
+
+    unsafe {
+        // TODO: {a:<r} should be written as {a=:r} or {a:=r}
+
+        asm_format!(volatile, rax,
+            "mov {a:r}, %rax;"
+            "add %rbx, %rax;"
+            "mov %rax, {a:<r}", a = 7 -> c, "{rbx}" = b)
+
+        asm!("nop")
+        println!("{}", c)
+    }
 }
