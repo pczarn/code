@@ -19,6 +19,8 @@ use collections::{HashMap, HashSet};
 use std::fmt;
 use std::intrinsics::transmute;
 
+use std::vec_ng::Vec;
+
 #[macro_export]
 macro_rules! exported_macro (() => (2))
 
@@ -85,7 +87,7 @@ struct Context<'a> {
 
 impl<'a> Context<'a> {
     fn trans_piece<'a>(&mut self, piece: fmt::parse::Piece<'a>) -> AsmPiece<'a> {
-        use fmt::parse::{Argument, ArgumentNext, ArgumentIs, ArgumentNamed, CountImplied, FormatSpec, AlignUnknown};
+        use fmt::parse::{Argument, ArgumentNext, ArgumentIs, ArgumentNamed, CountImplied, FormatSpec, AlignUnknown, AlignLeft};
 
         match piece {
             fmt::parse::String(s) => String(s),
@@ -99,151 +101,228 @@ impl<'a> Context<'a> {
                 method: None,
             }) => {
                 println!("{}", ty)
-                let (idx, name) = match pos {
+                // let (idx, name) = match pos {
+                //     ArgumentNext => {
+                //         let arg = (self.next_input, ty.to_owned());
+                //         self.next_input += 1;
+                //         match self.arg_inputs.position_elem(&arg) {
+                //             Some(idx) => {
+                //                 Input(idx)
+                //             }
+                //             None => {
+                //                 let this = Input(self.arg_inputs.len());
+                //                 self.arg_inputs.push(arg);
+                //                 this
+                //             }
+                //         }
+                //     },
+                //     /*ArgumentIs(n) => match self.arg_types[n].position_elem(&ty.to_owned()) {
+                //         Some(idx) => {
+                //             Input(n, idx)
+                //         }
+                //         None => {
+                //             self.num_inputs += 1;
+                //             self.arg_types[n].push(ty.to_owned());
+                //             Input(n, self.arg_types[n].len() - 1)
+                //         }
+                //     },*/
+                //     ArgumentIs(n) => {
+                //         let arg = (n, ty.to_owned());
+                //         match self.arg_inputs.position_elem(&arg) {
+                //             Some(idx) => {
+                //                 Input(idx)
+                //             }
+                //             None => {
+                //                 self.arg_inputs.push(arg);
+                //                 Input(self.arg_inputs.len() - 1)
+                //             }
+                //         }
+                //     },
+                //     ArgumentNamed(name) => /*self.name_types[name]*/ {
+                //         // match self.name_types.mangle(&name) {
+                //         //     None => {
+                //         //         self.name_types.insert(name.to_owned(), ~[ty.to_owned()]);
+                //         //     }
+                //         //     Some(t) => {
+                //         //         // t.push(ty.to_owned());
+                //         //     }
+                //         // }
+                //         // self.name_types.insert_or_update_with(
+                //         //     name.to_owned(),
+                //         //     ~[ty.to_owned()],
+                //         //     |k, v| { v.push(ty.to_owned()); });
+                //         // InputNamed(name, ty)
+                //         let arg = (name.to_owned(), ty.to_owned());
+                //         match self.named_inputs.position_elem(&arg) {
+                //             Some(idx) => {
+                //                 InputNamed(idx)
+                //             }
+                //             None => {
+                //                 let this = InputNamed(self.named_inputs.len());
+                //                 self.named_inputs.push(arg);
+                //                 this
+                //             }
+                //         }
+                //     }
+                // }
+
+                let (args, named) = match (align, pos) {
+                    (AlignLeft, ArgumentNext) | (AlignLeft, ArgumentIs(_)) => {
+                        (Some(&mut self.arg_outputs), None)
+                    }
+                    (AlignUnknown, ArgumentNext) | (AlignUnknown, ArgumentIs(_)) => {
+                        (Some(&mut self.arg_inputs), None)
+                    }
+                    (AlignLeft, ArgumentNamed(_)) => {
+                        (None, Some(&mut self.named_outputs))
+                    }
+                    (AlignUnknown, ArgumentNamed(_)) => {
+                        (None, Some(&mut self.named_inputs))
+                    }
+                    _ => fail!("invalid align")
+                };
+
+                let (key, name_key) = match pos {
                     ArgumentNext => {
-                        let arg = (self.next_input, ty.to_owned());
+                        let key = self.next_input;
                         self.next_input += 1;
-                        match self.arg_inputs.position_elem(&arg) {
-                            Some(idx) => {
-                                Input(idx)
-                            }
+                        (Some((key, ty.to_owned())), None)
+                    }
+                    ArgumentIs(n) => (Some((n, ty.to_owned())), None),
+                    ArgumentNamed(name) => (None, Some((name.to_owned(), ty.to_owned())))
+                };
+
+                let idx = match ((args, key), (named, name_key)) {
+                    ((Some(arg), Some(key)), _) => {
+                        match arg.position_elem(&key) {
+                            Some(idx) => idx,
                             None => {
-                                self.num_inputs += 1;
-                                let this = Input(self.arg_inputs.len());
-                                self.arg_inputs.push(arg);
-                                this
-                            }
-                        }
-                    },
-                    /*ArgumentIs(n) => match self.arg_types[n].position_elem(&ty.to_owned()) {
-                        Some(idx) => {
-                            Input(n, idx)
-                        }
-                        None => {
-                            self.num_inputs += 1;
-                            self.arg_types[n].push(ty.to_owned());
-                            Input(n, self.arg_types[n].len() - 1)
-                        }
-                    },*/
-                    ArgumentIs(n) => {
-                        let arg = (n, ty.to_owned());
-                        match self.arg_inputs.position_elem(&arg) {
-                            Some(idx) => {
-                                Input(idx)
-                            }
-                            None => {
-                                self.num_inputs += 1;
-                                self.arg_inputs.push(arg);
-                                Input(self.arg_inputs.len() - 1)
-                            }
-                        }
-                    },
-                    ArgumentNamed(name) => /*self.name_types[name]*/ {
-                        // match self.name_types.mangle(&name) {
-                        //     None => {
-                        //         self.name_types.insert(name.to_owned(), ~[ty.to_owned()]);
-                        //     }
-                        //     Some(t) => {
-                        //         // t.push(ty.to_owned());
-                        //     }
-                        // }
-                        // self.name_types.insert_or_update_with(
-                        //     name.to_owned(),
-                        //     ~[ty.to_owned()],
-                        //     |k, v| { v.push(ty.to_owned()); });
-                        // InputNamed(name, ty)
-                        let arg = (name.to_owned(), ty.to_owned());
-                        match self.named_inputs.position_elem(&arg) {
-                            Some(idx) => {
-                                InputNamed(idx)
-                            }
-                            None => {
-                                let this = InputNamed(self.named_inputs.len());
-                                self.named_inputs.push(arg);
-                                this
+                                let last_idx = arg.len();
+                                arg.push(key);
+                                last_idx
                             }
                         }
                     }
-                }
+                    (_, (Some(arg), Some(key))) => {
+                        match arg.position_elem(&key) {
+                            Some(idx) => idx,
+                            None => {
+                                let last_idx = arg.len();
+                                arg.push(key);
+                                last_idx
+                            }
+                        }
+                    }
+                    _ => fail!("")
+                };
 
                 match (align, pos) {
-                    (AlignUnknown, ArgumentNext) => {
-                        let arg = (self.next_input, ty.to_owned());
-                        self.next_input += 1;
-                        match self.arg_inputs.position_elem(&arg) {
-                            Some(idx) => {
-                                Input(idx)
-                            }
-                            None => {
-                                self.num_inputs += 1;
-                                let this = Input(self.arg_inputs.len());
-                                self.arg_inputs.push(arg);
-                                this
-                            }
-                        }
+                    (AlignLeft, ArgumentNext) | (AlignLeft, ArgumentIs(_)) => {
+                        Output(idx)
                     }
-                    (AlignLeft, ArgumentNext) => {
-                        let arg = (self.next_input, ty.to_owned());
-                        self.next_input += 1;
-                        match self.arg_outputs.position_elem(&arg) {
-                            Some(idx) => {
-                                Output(idx)
-                            }
-                            None => {
-                                self.num_outputs += 1;
-                                let this = Output(self.arg_outputs.len());
-                                self.arg_inputs.push(arg);
-                                this
-                            }
-                        }
+                    (AlignUnknown, ArgumentNext) | (AlignUnknown, ArgumentIs(_)) => {
+                        Input(idx)
                     }
-                    (AlignUnknown, ArgumentIs(n)) => {
-                        let arg = (n, ty.to_owned());
-                        match self.arg_inputs.position_elem(&arg) {
-                            Some(idx) => {
-                                Input(idx)
-                            }
-                            None => {
-                                self.num_inputs += 1;
-                                let this = Input(self.arg_inputs.len());
-                                self.arg_inputs.push(arg);
-                                this
-                            }
-                        }
+                    (AlignLeft, ArgumentNamed(_)) => {
+                        OutputNamed(idx)
                     }
-                    (AlignLeft, ArgumentIs(n)) => {
-                        let arg = (n, ty.to_owned());
-                        match self.arg_outputs.position_elem(&arg) {
-                            Some(idx) => {
-                                Output(idx)
-                            }
-                            None => {
-                                self.num_outputs += 1;
-                                let this = Output(self.arg_outputs.len());
-                                self.arg_inputs.push(arg);
-                                this
-                            }
-                        }
-                    }
-                    (AlignLeft, ArgumentNamed(name)) => {
-                        let arg = (name.to_owned(), ty.to_owned());
-                        match self.named_inputs.position_elem(&arg) {
-                            Some(idx) => {
-                                InputNamed(idx)
-                            }
-                            None => {
-                                let this = InputNamed(self.named_inputs.len());
-                                self.named_inputs.push(arg);
-                                this
-                            }
-                        }
-                    }
-                    AlignLeft =>
-                    (AlignUnknown, Some(idx), None) => {
-                        Input()
+                    (AlignUnknown, ArgumentNamed(_)) => {
+                        InputNamed(idx)
                     }
                     _ => fail!("invalid align")
                 }
+
+                // match args.position_elem(&arg) {
+                //     ArgumentNext => {
+
+                // }
+
+                // match (align, pos) {
+                //     (AlignUnknown, ArgumentNext) => {
+                //         let arg = (self.next_input, ty.to_owned());
+                //         self.next_input += 1;
+                //         match self.arg_inputs.position_elem(&arg) {
+                //             Some(idx) => {
+                //                 Input(idx)
+                //             }
+                //             None => {
+                //                 let this = Input(self.arg_inputs.len());
+                //                 self.arg_inputs.push(arg);
+                //                 this
+                //             }
+                //         }
+                //     }
+                //     (AlignLeft, ArgumentNext) => {
+                //         let arg = (self.next_input, ty.to_owned());
+                //         self.next_input += 1;
+                //         match self.arg_outputs.position_elem(&arg) {
+                //             Some(idx) => {
+                //                 Output(idx)
+                //             }
+                //             None => {
+                //                 let this = Output(self.arg_outputs.len());
+                //                 self.arg_inputs.push(arg);
+                //                 this
+                //             }
+                //         }
+                //     }
+                //     (AlignUnknown, ArgumentIs(n)) => {
+                //         let arg = (n, ty.to_owned());
+                //         match self.arg_inputs.position_elem(&arg) {
+                //             Some(idx) => {
+                //                 Input(idx)
+                //             }
+                //             None => {
+                //                 let this = Input(self.arg_inputs.len());
+                //                 self.arg_inputs.push(arg);
+                //                 this
+                //             }
+                //         }
+                //     }
+                //     (AlignLeft, ArgumentIs(n)) => {
+                //         let arg = (n, ty.to_owned());
+                //         match self.arg_outputs.position_elem(&arg) {
+                //             Some(idx) => {
+                //                 Output(idx)
+                //             }
+                //             None => {
+                //                 let this = Output(self.arg_outputs.len());
+                //                 self.arg_inputs.push(arg);
+                //                 this
+                //             }
+                //         }
+                //     }
+                //     (AlignLeft, ArgumentNamed(name)) => {
+                //         let arg = (name.to_owned(), ty.to_owned());
+                //         match self.named_inputs.position_elem(&arg) {
+                //             Some(idx) => {
+                //                 InputNamed(idx)
+                //             }
+                //             None => {
+                //                 let this = InputNamed(self.named_inputs.len());
+                //                 self.named_inputs.push(arg);
+                //                 this
+                //             }
+                //         }
+                //     }
+                //     (AlignUnknown, ArgumentNamed(name)) => {
+                //         let arg = (name.to_owned(), ty.to_owned());
+                //         match self.named_inputs.position_elem(&arg) {
+                //             Some(idx) => {
+                //                 InputNamed(idx)
+                //             }
+                //             None => {
+                //                 let this = InputNamed(self.named_inputs.len());
+                //                 self.named_inputs.push(arg);
+                //                 this
+                //             }
+                //         }
+                //     }
+                //     (AlignUnknown, Some(idx), None) => {
+                //         Input()
+                //     }
+                //     _ => fail!("invalid align")
+                // }
             }
             // fmt::parse::Argument(ref arg) => {}
             // fmt::parse::CurrentArgument => fail!("methods not impl")
@@ -314,9 +393,14 @@ impl<'a> Context<'a> {
 }
 
 pub fn expand_asm_format(ecx: &mut ExtCtxt, sp: Span, tts: &[TokenTree]) -> MacResult {
+    // let mut p = parse::new_parser_from_tts(ecx.parse_sess(),
+    //                                        ecx.cfg(),
+    //                                        tts.to_owned());
     let mut p = parse::new_parser_from_tts(ecx.parse_sess(),
                                            ecx.cfg(),
-                                           tts.to_owned());
+                                           tts.iter()
+                                              .map(|x| (*x).clone())
+                                              .collect());
 
     // if !tts.is_empty() {
     //     cx.span_fatal(sp, "asm_format takes no arguments");
@@ -347,8 +431,8 @@ pub fn expand_asm_format(ecx: &mut ExtCtxt, sp: Span, tts: &[TokenTree]) -> MacR
             asm: InternedString::new(""),
             asm_str_style: ast::CookedStr,
             clobbers: InternedString::new(""),
-            inputs: ~[],
-            outputs: ~[],
+            inputs: Vec::new(),
+            outputs: Vec::new(),
             volatile: false,
             alignstack: false,
             dialect: ast::AsmIntel
@@ -514,24 +598,36 @@ pub fn expand_asm_format(ecx: &mut ExtCtxt, sp: Span, tts: &[TokenTree]) -> MacR
         }
     }
 
+    let mut pieces = ~[];
+    for &(ref pcs, ref pspan) in apieces.iter() {
+        // pieces.push(cx.format_pieces(pcs, *pspan));
+        for &p in cx.format_pieces(pcs, *pspan).iter() {
+            pieces.push(p);
+        }
+    }
+
+    cx.num_outputs += cx.arg_outputs.len();
+    cx.num_inputs += cx.arg_inputs.len();
+
+    let b = cx.num_outputs;
+    let c = cx.num_outputs + cx.num_inputs;
+
     // handle asm pieces
-    for &(ref p, ref pspan) in apieces.iter() {
+    for &p in pieces.iter() {
             // for &(ref p, ref pspan) in apieces.iter() {
         // cx.format_pieces(p, *pspan);
     // }
-        let b = cx.num_outputs;
-        let c = cx.num_outputs + cx.num_inputs;
         // let d = 
-        println!("{}", p)
-        for j in cx.format_pieces(p, *pspan).iter() {
-            match *j {
+        // println!("{}", p)
+        // for j in cx.format_pieces(p, *pspan).iter() {
+            match p {
                 String(s) => cx.asm_str.push_str(s),
                 Output(i) => cx.asm_str.push_str("$" + i.to_str()),
                 OutputNamed(i) => cx.asm_str.push_str("$" + i.to_str()),
                 Input(n) => cx.asm_str.push_str("$" + (n + b).to_str()),
                 InputNamed(n) => cx.asm_str.push_str("$" + (n + c).to_str())
             }
-        }
+        // }
     }
 
     for &(ref a, ref b) in cx.named_outputs.iter() {

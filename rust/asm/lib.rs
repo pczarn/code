@@ -11,8 +11,8 @@ fn main() {
 	// println!("{}", 1);
 	unsafe {
 		asm_format!(volatile, rax,
-			"mov rax, {a:<r};"
-			"add rax, {a:<i}", /*"{r0}" = 1 -> 2,*/ a = 123 -> c)
+			"mov rax, {a:r};"
+			"add rax, {a:i}", /*"{r0}" = 1 -> 2,*/ a = 123 -> c)
 		asm!("nop")
 		println!("{}", c)
 	}
