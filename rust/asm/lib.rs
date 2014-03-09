@@ -1,4 +1,4 @@
-#[feature(phase)];
+#[feature(phase, asm)];
 
 #[phase(syntax)]
 extern crate asm_ext;
@@ -6,8 +6,14 @@ extern crate asm_ext;
 
 fn main() {
 	assert_eq!(2, exported_macro!());
+	let mut c = ~0;
+	let b = 123;
 	// println!("{}", 1);
 	unsafe {
-		asm_format!(volatile, "call {a:<rw}"" {a:<r}rax", "{r0}" = 1 -> 2, a = b -> c)
+		asm_format!(volatile, rax,
+			"mov rax, {a:<r};"
+			"add rax, {a:<i}", /*"{r0}" = 1 -> 2,*/ a = 123 -> c)
+		asm!("nop")
+		println!("{}", c)
 	}
 }

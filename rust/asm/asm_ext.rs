@@ -45,9 +45,9 @@ pub fn macro_registrar(register: |Name, SyntaxExtension|) {
 enum AsmPiece<'a> {
     String(&'a str),
     Output(uint),
-    // OutputNamed(&'a str, uint),
-    Input(uint, uint),
-    InputNamed(&'a str, &'a str)
+    OutputNamed(uint),
+    Input(uint),
+    InputNamed(uint)
 }
 
 struct Context<'a> {
@@ -60,14 +60,17 @@ struct Context<'a> {
     // Parsed argument expressions and the types that we've found so far for
     // them.
     args: ~[(@ast::Expr, Option<@ast::Expr>)],
-    arg_types: ~[~[~str]],
+    arg_outputs: ~[(uint, ~str)],
+    arg_inputs: ~[(uint, ~str)],
     // Parsed named expressions and the types that we've found for them so far.
     // Note that we keep a side-array of the ordering of the named arguments
     // found to be sure that we can translate them in the same order that they
     // were declared in.
     names: HashMap<~str, (@ast::Expr, Option<@ast::Expr>)>,
-    name_types: HashMap<~str, ~[~str]>,
-    name_ordering: ~[~str],
+    // name_types: HashMap<~str, ~[~str]>,
+    // name_ordering: ~[~str],
+    named_outputs: ~[(~str, ~str)],
+    named_inputs: ~[(~str, ~str)],
 
     // Collection of strings
     pieces: ~[~AsmPiece<'a>],
@@ -75,8 +78,9 @@ struct Context<'a> {
 
     // Updated as arguments are consumed or methods are entered
     next_output: uint,
-    next_input: uint,
+    next_input: uint, // TODO rename to next_argument
     num_outputs: uint,
+    num_inputs: uint,
 }
 
 impl<'a> Context<'a> {
@@ -89,36 +93,49 @@ impl<'a> Context<'a> {
                 position: pos,
                 format: FormatSpec {
                     ty: ty,
-                    align: AlignLeft,
+                    align: align,
                     fill: None, flags: 0, precision: CountImplied, width: CountImplied,
                 },
                 method: None,
             }) => {
                 println!("{}", ty)
-                match pos {
+                let (idx, name) = match pos {
                     ArgumentNext => {
-                        let types = &mut self.arg_types[self.next_input];
-                        let pos = self.next_input;
+                        let arg = (self.next_input, ty.to_owned());
                         self.next_input += 1;
-                        let ty = ty.to_owned();
-                        match types.position_elem(&ty) {
+                        match self.arg_inputs.position_elem(&arg) {
                             Some(idx) => {
-                                Input(pos, idx)
+                                Input(idx)
                             }
                             None => {
-                                let this = Input(pos, types.len());
-                                types.push(ty);
+                                self.num_inputs += 1;
+                                let this = Input(self.arg_inputs.len());
+                                self.arg_inputs.push(arg);
                                 this
                             }
                         }
                     },
-                    ArgumentIs(n) => match self.arg_types[n].position_elem(&ty.to_owned()) {
+                    /*ArgumentIs(n) => match self.arg_types[n].position_elem(&ty.to_owned()) {
                         Some(idx) => {
                             Input(n, idx)
                         }
                         None => {
+                            self.num_inputs += 1;
                             self.arg_types[n].push(ty.to_owned());
                             Input(n, self.arg_types[n].len() - 1)
+                        }
+                    },*/
+                    ArgumentIs(n) => {
+                        let arg = (n, ty.to_owned());
+                        match self.arg_inputs.position_elem(&arg) {
+                            Some(idx) => {
+                                Input(idx)
+                            }
+                            None => {
+                                self.num_inputs += 1;
+                                self.arg_inputs.push(arg);
+                                Input(self.arg_inputs.len() - 1)
+                            }
                         }
                     },
                     ArgumentNamed(name) => /*self.name_types[name]*/ {
@@ -130,12 +147,102 @@ impl<'a> Context<'a> {
                         //         // t.push(ty.to_owned());
                         //     }
                         // }
-                        self.name_types.insert_or_update_with(
-                            name.to_owned(),
-                            ~[ty.to_owned()],
-                            |k, v| { v.push(ty.to_owned()); });
-                        InputNamed(name, ty)
+                        // self.name_types.insert_or_update_with(
+                        //     name.to_owned(),
+                        //     ~[ty.to_owned()],
+                        //     |k, v| { v.push(ty.to_owned()); });
+                        // InputNamed(name, ty)
+                        let arg = (name.to_owned(), ty.to_owned());
+                        match self.named_inputs.position_elem(&arg) {
+                            Some(idx) => {
+                                InputNamed(idx)
+                            }
+                            None => {
+                                let this = InputNamed(self.named_inputs.len());
+                                self.named_inputs.push(arg);
+                                this
+                            }
+                        }
                     }
+                }
+
+                match (align, pos) {
+                    (AlignUnknown, ArgumentNext) => {
+                        let arg = (self.next_input, ty.to_owned());
+                        self.next_input += 1;
+                        match self.arg_inputs.position_elem(&arg) {
+                            Some(idx) => {
+                                Input(idx)
+                            }
+                            None => {
+                                self.num_inputs += 1;
+                                let this = Input(self.arg_inputs.len());
+                                self.arg_inputs.push(arg);
+                                this
+                            }
+                        }
+                    }
+                    (AlignLeft, ArgumentNext) => {
+                        let arg = (self.next_input, ty.to_owned());
+                        self.next_input += 1;
+                        match self.arg_outputs.position_elem(&arg) {
+                            Some(idx) => {
+                                Output(idx)
+                            }
+                            None => {
+                                self.num_outputs += 1;
+                                let this = Output(self.arg_outputs.len());
+                                self.arg_inputs.push(arg);
+                                this
+                            }
+                        }
+                    }
+                    (AlignUnknown, ArgumentIs(n)) => {
+                        let arg = (n, ty.to_owned());
+                        match self.arg_inputs.position_elem(&arg) {
+                            Some(idx) => {
+                                Input(idx)
+                            }
+                            None => {
+                                self.num_inputs += 1;
+                                let this = Input(self.arg_inputs.len());
+                                self.arg_inputs.push(arg);
+                                this
+                            }
+                        }
+                    }
+                    (AlignLeft, ArgumentIs(n)) => {
+                        let arg = (n, ty.to_owned());
+                        match self.arg_outputs.position_elem(&arg) {
+                            Some(idx) => {
+                                Output(idx)
+                            }
+                            None => {
+                                self.num_outputs += 1;
+                                let this = Output(self.arg_outputs.len());
+                                self.arg_inputs.push(arg);
+                                this
+                            }
+                        }
+                    }
+                    (AlignLeft, ArgumentNamed(name)) => {
+                        let arg = (name.to_owned(), ty.to_owned());
+                        match self.named_inputs.position_elem(&arg) {
+                            Some(idx) => {
+                                InputNamed(idx)
+                            }
+                            None => {
+                                let this = InputNamed(self.named_inputs.len());
+                                self.named_inputs.push(arg);
+                                this
+                            }
+                        }
+                    }
+                    AlignLeft =>
+                    (AlignUnknown, Some(idx), None) => {
+                        Input()
+                    }
+                    _ => fail!("invalid align")
                 }
             }
             // fmt::parse::Argument(ref arg) => {}
@@ -143,7 +250,6 @@ impl<'a> Context<'a> {
             _ => fail!("methods not impl")
         }
     }
-
 
     fn format_pieces<'a>(&mut self, s: &'a InternedString, sp: Span) -> ~[AsmPiece<'a>] {
         let mut p = ~[];
@@ -177,13 +283,20 @@ impl<'a> Context<'a> {
         let mut expr = ast::InlineAsm {
             asm: token::intern_and_get_ident(self.asm_str),
             asm_str_style: ast::CookedStr,
-            clobbers: token::intern_and_get_ident(~""),
-            inputs: ~[],
-            outputs: ~[],
-            volatile: false,
-            alignstack: false,
-            dialect: ast::AsmIntel
+            clobbers: self.expr.clobbers.clone(),
+            inputs: self.expr.inputs.clone(),
+            outputs: self.expr.outputs.clone(),
+            volatile: self.expr.volatile.clone(),
+            alignstack: self.expr.alignstack.clone(),
+            dialect: self.expr.dialect.clone()
         };
+        println!("{}", self.asm_str);
+        for &(ref a, b) in self.expr.inputs.clone().iter() {
+            println!("in: {}", a)
+        }
+        for &(ref a, b) in self.expr.outputs.clone().iter() {
+            println!("out: {}", a)
+        }
         expr
     }
 
@@ -215,21 +328,25 @@ pub fn expand_asm_format(ecx: &mut ExtCtxt, sp: Span, tts: &[TokenTree]) -> MacR
     let mut cx = Context {
         ecx: ecx,
         args: ~[],
-        arg_types: ~[],
+        arg_outputs: ~[],
+        arg_inputs: ~[],
         names: HashMap::new(),
         name_positions: HashMap::new(),
-        name_types: HashMap::new(),
-        name_ordering: ~[],
+        // name_types: HashMap::new(),
+        // name_ordering: ~[],
+        named_outputs: ~[],
+        named_inputs: ~[],
         next_input: 0,
         next_output: 0,
         num_outputs: 0,
+        num_inputs: 0,
         pieces: ~[],
         fmtsp: ~[],
         asm_str: ~"",
         expr: ast::InlineAsm {
-            asm: token::intern_and_get_ident(~""),
+            asm: InternedString::new(""),
             asm_str_style: ast::CookedStr,
-            clobbers: token::intern_and_get_ident(~""),
+            clobbers: InternedString::new(""),
             inputs: ~[],
             outputs: ~[],
             volatile: false,
@@ -264,7 +381,8 @@ pub fn expand_asm_format(ecx: &mut ExtCtxt, sp: Span, tts: &[TokenTree]) -> MacR
                 } else if option.equiv(&("alignstack")) {
                     cx.expr.alignstack = true;
                 } else {//if option.is_some() {
-                    clobs.push(option.get().to_owned());
+                    let clob = format!("~\\{{}\\}", option.get().to_owned());
+                    clobs.push(clob);
                 }
                 // match token::get_ident(p.parse_ident()).get() {
                 //     &"volatile" => println!("vol"),
@@ -286,7 +404,8 @@ pub fn expand_asm_format(ecx: &mut ExtCtxt, sp: Span, tts: &[TokenTree]) -> MacR
         None => return MacResult::dummy_expr(sp),
     };
     // asm.push(s);
-    cx.format_pieces(&s, asm_expr.span);
+    // cx.format_pieces(&s, asm_expr.span);
+    apieces.push((s, asm_expr.span));
 
     asm_str_style = Some(style);
     loop {
@@ -331,11 +450,12 @@ pub fn expand_asm_format(ecx: &mut ExtCtxt, sp: Span, tts: &[TokenTree]) -> MacR
                     p.expect(&token::EQ);
                     let e = p.parse_expr();
                     cx.expr.inputs.push((s.clone(), e));
+                    cx.num_inputs += 1;
                     if p.token == token::RARROW {
                         p.bump();
                         let out = p.parse_expr();
                         // cx.names.insert(name.to_str(), (e, Some(out)));
-                        cx.expr.outputs.push((s, out));
+                        cx.expr.outputs.push((token::intern_and_get_ident("=" + s.get()), out));
                         cx.num_outputs += 1;
                     }
                 }
@@ -370,7 +490,7 @@ pub fn expand_asm_format(ecx: &mut ExtCtxt, sp: Span, tts: &[TokenTree]) -> MacR
                             continue
                         }
                     }
-                    cx.name_ordering.push(name.to_str());
+                    // cx.name_ordering.push(name.to_str());
                     if p.token == token::RARROW {
                         p.bump();
                         let out = p.parse_expr();
@@ -399,16 +519,40 @@ pub fn expand_asm_format(ecx: &mut ExtCtxt, sp: Span, tts: &[TokenTree]) -> MacR
             // for &(ref p, ref pspan) in apieces.iter() {
         // cx.format_pieces(p, *pspan);
     // }
+        let b = cx.num_outputs;
+        let c = cx.num_outputs + cx.num_inputs;
+        // let d = 
+        println!("{}", p)
         for j in cx.format_pieces(p, *pspan).iter() {
-        match *j {
-            String(s) => cx.asm_str.push_str(s),
-            Output(i) => cx.asm_str.push_str("$" + i.to_str()),
-            Input(i, n) => cx.asm_str.push_str("$" + (i + cx.num_outputs).to_str()),
-            InputNamed(n, ty) => cx.asm_str.push_str("$0")
+            match *j {
+                String(s) => cx.asm_str.push_str(s),
+                Output(i) => cx.asm_str.push_str("$" + i.to_str()),
+                OutputNamed(i) => cx.asm_str.push_str("$" + i.to_str()),
+                Input(n) => cx.asm_str.push_str("$" + (n + b).to_str()),
+                InputNamed(n) => cx.asm_str.push_str("$" + (n + c).to_str())
+            }
         }
     }
+
+    for &(ref a, ref b) in cx.named_outputs.iter() {
+        // println!("{} len:{}", b, cx.name_types_ordering.len());
+        match cx.names.get(a) {
+            &(_, Some(out)) | &(out, _) => {
+                cx.expr.outputs.push((token::intern_and_get_ident("=" + *b), out));
+            }
+        }
     }
-    println!("{} {}", cx.arg_types, cx.name_types);
+
+    for &(ref a, ref b) in cx.named_inputs.iter() {
+        // println!("{} len:{}", b, cx.name_types_ordering.len());
+        match cx.names.get(a) {
+            &(inp, _) => {
+                cx.expr.inputs.push((token::intern_and_get_ident(*b), inp));
+            }
+        }
+    }
+
+    println!("{} {} {}", cx.arg_inputs, cx.named_inputs, cx.named_outputs);
     // MRExpr(quote_expr!(cx, 1i))
     cx.to_expr(sp)
 }
