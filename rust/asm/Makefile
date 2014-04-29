@@ -1,10 +1,8 @@
+# RUSTC := /usr/bin/rustc
+RUSTC := rustc-stage2
+# RUSTC := /home/piotr/Desktop/src/rust/x86_64-unknown-linux-gnu/stage2/bin/rustc
+
 all: lib
-	./lib
 
-libasm_ext: asm_ext.rs
-	/usr/local/bin/rustc --crate-type=dylib -O asm_ext.rs
-#-L /usr/lib/rustlib/x86_64-unknown-linux-gnu/lib/
-
-lib: lib.rs libasm_ext
-	/usr/local/bin/rustc --emit=ir,link lib.rs -L .
-#-L /usr/lib/rustlib/x86_64-unknown-linux-gnu/lib/
+lib: lib.rs
+	$(RUSTC) -Z verbose --crate-type=dylib -O $^ --out-dir .
