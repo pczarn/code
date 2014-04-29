@@ -5,6 +5,6 @@ all: inline_test
 	# stage1-rustc simple.rs
 	# ./simple
 
-inline_test: inline_test.rs
+inline_test: inline_test.rs asm/lib.rs
 	make -C asm/
 	$(RUSTC) --emit=ir,link inline_test.rs -L asm/
