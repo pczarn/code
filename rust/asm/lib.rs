@@ -1,7 +1,11 @@
+#![crate_id = "asm_format#0.11-pre"]
 #![crate_type="dylib"]
 #![feature(managed_boxes, globs, macro_registrar, macro_rules, quote)]
+#![experimental]
+
 extern crate syntax;
 extern crate collections;
+extern crate fmt_macros;
 
 use syntax::ast;
 // use syntax::codemap::Span;
@@ -17,7 +21,6 @@ use syntax::ext::base::*;
 use syntax::parse::token;
 
 use collections::HashMap;
-use std::fmt;
 // use std::intrinsics::transmute;
 
 use std::vec::Vec;
@@ -26,7 +29,7 @@ use std::strbuf::StrBuf;
 #[macro_registrar]
 pub fn macro_registrar  (register: |Name, SyntaxExtension|) {
     register(token::intern("asm_format"),
-        NormalTT(~BasicMacroExpander {
+        NormalTT(box BasicMacroExpander {
             expander: expand_asm_format,
             span: None,
         },
@@ -44,22 +47,21 @@ enum AsmPiece<'a> {
 struct Context<'a, 'b> {
     asm_str: StrBuf,
     expr: ast::InlineAsm,
-    expr_f: Option<~MacResult>,
+    expr_f: Option<Box<MacResult>>,
     ecx: &'a mut ExtCtxt<'b>,
-    fmtsp: ~[Span],
 
     // Parsed argument expressions and the types that we've found so far for
     // them.
-    args: ~[(@ast::Expr, Option<@ast::Expr>)],
-    arg_outputs: ~[(uint, ~str)],
-    arg_inputs: ~[(uint, ~str)],
+    args: Vec<(@ast::Expr, Option<@ast::Expr>)>,
+    arg_outputs: Vec<(uint, ~str)>,
+    arg_inputs: Vec<(uint, ~str)>,
     // Parsed named expressions and the types that we've found for them so far.
     // Note that we keep a side-array of the ordering of the named arguments
     // found to be sure that we can translate them in the same order that they
     // were declared in.
     names: HashMap<~str, (@ast::Expr, Option<@ast::Expr>)>,
-    named_outputs: ~[(~str, ~str)],
-    named_inputs: ~[(~str, ~str)],
+    named_outputs: Vec<(~str, ~str)>,
+    named_inputs: Vec<(~str, ~str)>,
 
     // Collection of strings
     // pieces: ~[~AsmPiece<'a>],
@@ -73,12 +75,12 @@ struct Context<'a, 'b> {
 }
 
 impl<'a, 'b> Context<'a, 'b> {
-    fn trans_piece<'a>(&mut self, piece: fmt::parse::Piece<'a>) -> AsmPiece<'a> {
-        use std::fmt::parse::{Argument, ArgumentNext, ArgumentIs, ArgumentNamed, CountImplied, FormatSpec, AlignUnknown, AlignLeft};
+    fn trans_piece<'a>(&mut self, piece: fmt_macros::Piece<'a>) -> AsmPiece<'a> {
+        use fmt_macros::{Argument, ArgumentNext, ArgumentIs, ArgumentNamed, CountImplied, FormatSpec, AlignUnknown, AlignLeft};
 
         match piece {
-            fmt::parse::String(s) => String(s),
-            fmt::parse::Argument(Argument {
+            fmt_macros::String(s) => String(s),
+            fmt_macros::Argument(Argument {
                 position: pos,
                 format: FormatSpec {
                     ty: ty,
@@ -115,7 +117,7 @@ impl<'a, 'b> Context<'a, 'b> {
 
                 let idx = match ((args, key), (named, name_key)) {
                     ((Some(arg), Some(key)), _) => {
-                        match arg.position_elem(&key) {
+                        match arg.as_slice().position_elem(&key) {
                             Some(idx) => idx,
                             None => {
                                 let last_idx = arg.len();
@@ -125,7 +127,7 @@ impl<'a, 'b> Context<'a, 'b> {
                         }
                     }
                     (_, (Some(arg), Some(key))) => {
-                        match arg.position_elem(&key) {
+                        match arg.as_slice().position_elem(&key) {
                             Some(idx) => idx,
                             None => {
                                 let last_idx = arg.len();
@@ -157,17 +159,17 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
-    fn format_pieces<'a>(&mut self, s: &'a InternedString, sp: Span) -> ~[AsmPiece<'a>] {
-        let mut p = ~[];
+    fn format_pieces<'a>(&mut self, s: &'a InternedString, sp: Span) -> Vec<AsmPiece<'a>> {
+        let mut pieces = Vec::new();
         let asm_str = s.get();
-        let mut parser = fmt::parse::Parser::new(asm_str);
+        let mut parser = fmt_macros::Parser::new(asm_str);
         loop {
             let n = parser.next();
             match n {
                 Some(piece) => {
                     if parser.errors.len() > 0 { break }
                     // verify_piece(cx, &piece);
-                    p.push(self.trans_piece(piece));
+                    pieces.push(self.trans_piece(piece));
                 }
                 None => break
             }
@@ -180,7 +182,7 @@ impl<'a, 'b> Context<'a, 'b> {
             }
             None => {}
         }
-        p
+        pieces
     }
 
     // fn to_expr_inline_asm(&self) -> ast::InlineAsm {
@@ -197,7 +199,7 @@ impl<'a, 'b> Context<'a, 'b> {
     //     expr
     // }
 
-    fn to_expr(mut self, sp: Span) -> ~MacResult {
+    fn into_expr(mut self, sp: Span) -> Box<MacResult> {
         //-----
         println!("{}", self.asm_str);
         for &(ref a, _) in self.expr.inputs.clone().iter() {
@@ -219,7 +221,7 @@ impl<'a, 'b> Context<'a, 'b> {
     }
 }
 
-pub fn expand_asm_format(ecx: &mut ExtCtxt, sp: Span, tts: &[TokenTree]) -> ~base::MacResult {
+pub fn expand_asm_format(ecx: &mut ExtCtxt, sp: Span, tts: &[TokenTree]) -> Box<base::MacResult> {
     let mut p = parse::new_parser_from_tts(ecx.parse_sess(),
                                            ecx.cfg(),
                                            tts.iter()
@@ -227,19 +229,18 @@ pub fn expand_asm_format(ecx: &mut ExtCtxt, sp: Span, tts: &[TokenTree]) -> ~bas
                                               .collect());
     let mut cx = Context {
         ecx: ecx,
-        args: ~[],
-        arg_outputs: ~[],
-        arg_inputs: ~[],
+        args: Vec::new(),
+        arg_outputs: Vec::new(),
+        arg_inputs: Vec::new(),
         names: HashMap::new(),
         name_positions: HashMap::new(),
-        named_outputs: ~[],
-        named_inputs: ~[],
+        named_outputs: Vec::new(),
+        named_inputs: Vec::new(),
         next_argument: 0,
         num_outputs: 0,
         num_named_outputs: 0,
         num_inputs: 0,
         // pieces: ~[],
-        fmtsp: ~[],
         asm_str: StrBuf::new(),
         expr: ast::InlineAsm {
             asm: InternedString::new(""),
@@ -254,8 +255,8 @@ pub fn expand_asm_format(ecx: &mut ExtCtxt, sp: Span, tts: &[TokenTree]) -> ~bas
         expr_f: None
     };
 
-    let mut clobs = ~[];
-    let mut apieces = ~[];
+    let mut clobs = Vec::new();
+    let mut apieces = Vec::new();
     loop {
         match p.token {
             token::IDENT(_, false) => {
@@ -389,7 +390,7 @@ pub fn expand_asm_format(ecx: &mut ExtCtxt, sp: Span, tts: &[TokenTree]) -> ~bas
         }
     }
 
-    let mut pieces = ~[];
+    let mut pieces = Vec::new();
     for &(ref pcs, ref pspan) in apieces.iter() {
         for &p in cx.format_pieces(pcs, *pspan).iter() {
             pieces.push(p);
@@ -431,9 +432,9 @@ pub fn expand_asm_format(ecx: &mut ExtCtxt, sp: Span, tts: &[TokenTree]) -> ~bas
         }
     }
 
-    cx.to_expr(sp)
+    cx.into_expr(sp)
 }
 
 // TODO
-fn verify_piece(cx: &mut Context, p: &fmt::parse::Piece) {
+fn verify_piece(cx: &mut Context, p: &fmt_macros::Piece) {
 }

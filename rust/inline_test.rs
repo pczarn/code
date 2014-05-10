@@ -1,7 +1,7 @@
 #![feature(phase, asm)]
 
 #[phase(syntax)]
-extern crate asm_ext;
+extern crate asm_format;
 
 fn main() {
     let mut c = 0;
