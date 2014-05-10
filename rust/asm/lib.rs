@@ -256,7 +256,7 @@ pub fn expand_asm_format(ecx: &mut ExtCtxt, sp: Span, tts: &[TokenTree]) -> Box<
     };
 
     let mut clobs = Vec::new();
-    let mut apieces = Vec::new();
+    // let mut apieces = Vec::new();
     loop {
         match p.token {
             token::IDENT(_, false) => {
@@ -282,33 +282,14 @@ pub fn expand_asm_format(ecx: &mut ExtCtxt, sp: Span, tts: &[TokenTree]) -> Box<
     cx.expr.clobbers = token::intern_and_get_ident(clobs.connect(","));
 
     let asm_expr = p.parse_expr();
-    let (s, style) = match expr_to_str(cx.ecx, asm_expr,
+    let (asm_str, style) = match expr_to_str(cx.ecx, asm_expr,
                                        "inline assembly must be a string literal.") {
-        Some((s, st)) => (s, st),
+        Some(tuple) => tuple,
         // let compilation continue
         None => return DummyResult::expr(sp),
     };
 
-    apieces.push((s, asm_expr.span));
-
-    let asm_str_style = Some(style);
-    loop {
-        let (s, style) = match p.parse_optional_str() {
-            Some((s_, st)) => (s_, st),
-            None => break
-        };
-        apieces.push((s, p.span));
-
-        match asm_str_style {
-            Some(st) => {
-                if st != style {
-                    // perhaps don't check
-                    fail!("style")
-                }
-            },
-            None => ()
-        }
-    }
+    // apieces.push((s, asm_expr.span));
 
     let mut named = false;
     while p.token != token::EOF {
@@ -390,12 +371,14 @@ pub fn expand_asm_format(ecx: &mut ExtCtxt, sp: Span, tts: &[TokenTree]) -> Box<
         }
     }
 
-    let mut pieces = Vec::new();
-    for &(ref pcs, ref pspan) in apieces.iter() {
-        for &p in cx.format_pieces(pcs, *pspan).iter() {
-            pieces.push(p);
-        }
-    }
+    // let mut pieces = Vec::new();
+    // for &(ref pcs, ref pspan) in apieces.iter() {
+    //     for &p in cx.format_pieces(pcs, *pspan).iter() {
+    //         pieces.push(p);
+    //     }
+    // }
+    // Translation of pieces.
+    let pieces = cx.format_pieces(&asm_str, asm_expr.span);
 
     cx.num_outputs += cx.arg_outputs.len();
     cx.num_named_outputs += cx.named_outputs.len();
@@ -405,7 +388,7 @@ pub fn expand_asm_format(ecx: &mut ExtCtxt, sp: Span, tts: &[TokenTree]) -> Box<
     let offset_inputs = offset_named_outputs + cx.num_named_outputs;
     let offset_named_inputs = offset_inputs + cx.num_inputs;
 
-    // handle asm pieces
+    // Transcription of pieces.
     for &p in pieces.iter() {
         match p {
             String(s) => cx.asm_str.push_str(s),
