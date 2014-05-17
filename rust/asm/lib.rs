@@ -8,12 +8,9 @@ extern crate collections;
 extern crate fmt_macros;
 
 use syntax::ast;
-// use syntax::codemap::Span;
 use syntax::ext::base;
-// use syntax::ext::base::*;
 use syntax::parse;
 use syntax::parse::token::InternedString;
-// use syntax::parse::token;
 
 use syntax::ast::{Name, TokenTree};
 use syntax::codemap::Span;
@@ -21,13 +18,12 @@ use syntax::ext::base::*;
 use syntax::parse::token;
 
 use collections::HashMap;
-// use std::intrinsics::transmute;
 
 use std::vec::Vec;
 use std::strbuf::StrBuf;
 
 #[macro_registrar]
-pub fn macro_registrar  (register: |Name, SyntaxExtension|) {
+pub fn macro_registrar(register: |Name, SyntaxExtension|) {
     register(token::intern("asm_format"),
         NormalTT(box BasicMacroExpander {
             expander: expand_asm_format,
@@ -47,7 +43,7 @@ enum AsmPiece<'a> {
 struct Context<'a, 'b> {
     asm_str: StrBuf,
     expr: ast::InlineAsm,
-    expr_f: Option<Box<MacResult>>,
+    dummy: Option<Box<MacResult>>,
     ecx: &'a mut ExtCtxt<'b>,
 
     // Parsed argument expressions and the types that we've found so far for
@@ -64,19 +60,16 @@ struct Context<'a, 'b> {
     named_inputs: Vec<(~str, ~str)>,
 
     // Collection of strings
-    // pieces: ~[~AsmPiece<'a>],
     name_positions: HashMap<~str, uint>,
 
     // Updated as arguments are consumed or methods are entered
-    next_argument: uint, // TODO rename to next_argument
-    num_outputs: uint,
-    num_named_outputs: uint,
-    num_inputs: uint,
+    next_argument: uint,
 }
 
 impl<'a, 'b> Context<'a, 'b> {
     fn trans_piece<'a>(&mut self, piece: fmt_macros::Piece<'a>) -> AsmPiece<'a> {
-        use fmt_macros::{Argument, ArgumentNext, ArgumentIs, ArgumentNamed, CountImplied, FormatSpec, AlignUnknown, AlignLeft};
+        use fmt_macros::{Argument, ArgumentNext, ArgumentIs, ArgumentNamed,
+            CountImplied, FormatSpec, AlignUnknown, AlignLeft};
 
         match piece {
             fmt_macros::String(s) => String(s),
@@ -115,8 +108,8 @@ impl<'a, 'b> Context<'a, 'b> {
                     ArgumentNamed(name) => (None, Some((name.to_owned(), ty.to_owned())))
                 };
 
-                let idx = match ((args, key), (named, name_key)) {
-                    ((Some(arg), Some(key)), _) => {
+                let idx = match (args, key, named, name_key) {
+                    (Some(arg), Some(key), _, _) => {
                         match arg.as_slice().position_elem(&key) {
                             Some(idx) => idx,
                             None => {
@@ -126,7 +119,7 @@ impl<'a, 'b> Context<'a, 'b> {
                             }
                         }
                     }
-                    (_, (Some(arg), Some(key))) => {
+                    (_, _, Some(arg), Some(key)) => {
                         match arg.as_slice().position_elem(&key) {
                             Some(idx) => idx,
                             None => {
@@ -155,9 +148,56 @@ impl<'a, 'b> Context<'a, 'b> {
                     _ => fail!("invalid align")
                 }
             }
-            _ => fail!("methods not impl")
+            _ => fail!("methods not implemented")
         }
     }
+
+    // fn verify_piece(&mut self, p: &AsmPiece) {
+    //     match *p {
+    //         fmt_macros::String(..) => {}
+    //         fmt_macros::Argument(ref arg) => {
+    //             // argument second, if it's an implicit positional parameter
+    //             // it's written second, so it should come after width/precision.
+    //             let pos = match arg.position {
+    //                 fmt_macros::ArgumentNext => {
+    //                     let i = self.next_arg;
+    //                     self.next_arg += 1;
+    //                     Exact(i)
+    //                 }
+    //                 fmt_macros::ArgumentIs(i) => Exact(i),
+    //                 fmt_macros::ArgumentNamed(s) => Named(s.to_strbuf()),
+    //             };
+
+    //             self.verify_arg_type(pos);
+    //         }
+    //         fmt_macros::CurrentArgument => fail!("methods not impl"),
+    //         _ => ()
+    //     }
+    // }
+
+    // fn verify_arg_type(&mut self, arg: Position) {
+    //     match arg {
+    //         Exact(arg) => {
+    //             if self.args.len() <= arg {
+    //                 let msg = format!("invalid reference to argument `{}` (there \
+    //                                 are {} arguments)", arg, self.args.len());
+    //                 self.ecx.span_err(self.fmtsp, msg);
+    //                 return;
+    //             }
+    //         }
+
+    //         Named(name) => {
+    //             let span = match self.names.find(&name) {
+    //                 Some(e) => e.span,
+    //                 None => {
+    //                     let msg = format!("there is no argument named `{}`", name);
+    //                     self.ecx.span_err(self.fmtsp, msg);
+    //                     return;
+    //                 }
+    //             };
+    //         }
+    //     }
+    // }
 
     fn format_pieces<'a>(&mut self, s: &'a InternedString, sp: Span) -> Vec<AsmPiece<'a>> {
         let mut pieces = Vec::new();
@@ -168,7 +208,7 @@ impl<'a, 'b> Context<'a, 'b> {
             match n {
                 Some(piece) => {
                     if parser.errors.len() > 0 { break }
-                    // verify_piece(cx, &piece);
+                    // self.verify_piece(&piece);
                     pieces.push(self.trans_piece(piece));
                 }
                 None => break
@@ -178,26 +218,12 @@ impl<'a, 'b> Context<'a, 'b> {
         match parser.errors.shift() {
             Some(error) => {
                 self.ecx.span_err(sp, "invalid format string: " + error);
-                self.expr_f = Some(DummyResult::expr(sp));
+                self.dummy = Some(DummyResult::expr(sp));
             }
             None => {}
         }
         pieces
     }
-
-    // fn to_expr_inline_asm(&self) -> ast::InlineAsm {
-    //     let expr = ast::InlineAsm {
-    //         asm: token::intern_and_get_ident(self.asm_str.as_slice()),
-    //         asm_str_style: ast::CookedStr,
-    //         clobbers: self.expr.clobbers.clone(),
-    //         inputs: self.expr.inputs.clone(),
-    //         outputs: self.expr.outputs.clone(),
-    //         volatile: self.expr.volatile.clone(),
-    //         alignstack: self.expr.alignstack.clone(),
-    //         dialect: self.expr.dialect.clone()
-    //     };
-    //     expr
-    // }
 
     fn into_expr(mut self, sp: Span) -> Box<MacResult> {
         //-----
@@ -210,7 +236,7 @@ impl<'a, 'b> Context<'a, 'b> {
         }
         //-----
         self.expr.asm = token::intern_and_get_ident(self.asm_str.as_slice());
-        match self.expr_f {
+        match self.dummy {
             Some(e) => e,
             None => base::MacExpr::new(@ast::Expr {
                 id: ast::DUMMY_NODE_ID,
@@ -237,10 +263,6 @@ pub fn expand_asm_format(ecx: &mut ExtCtxt, sp: Span, tts: &[TokenTree]) -> Box<
         named_outputs: Vec::new(),
         named_inputs: Vec::new(),
         next_argument: 0,
-        num_outputs: 0,
-        num_named_outputs: 0,
-        num_inputs: 0,
-        // pieces: ~[],
         asm_str: StrBuf::new(),
         expr: ast::InlineAsm {
             asm: InternedString::new(""),
@@ -252,11 +274,11 @@ pub fn expand_asm_format(ecx: &mut ExtCtxt, sp: Span, tts: &[TokenTree]) -> Box<
             alignstack: false,
             dialect: ast::AsmAtt
         },
-        expr_f: None
+        dummy: None
     };
 
     let mut clobs = Vec::new();
-    // let mut apieces = Vec::new();
+
     loop {
         match p.token {
             token::IDENT(_, false) => {
@@ -268,9 +290,8 @@ pub fn expand_asm_format(ecx: &mut ExtCtxt, sp: Span, tts: &[TokenTree]) -> Box<
                     cx.expr.alignstack = true;
                 } else if option.equiv(&("intel")) {
                     cx.expr.dialect = ast::AsmIntel;
-                } else { //if option.is_some() {
-                    let clob = format!("~\\{{}\\}", option.get().to_owned());
-                    clobs.push(clob);
+                } else {
+                    clobs.push(option.get().to_owned());
                 }
 
                 p.expect(&token::COMMA);
@@ -279,17 +300,16 @@ pub fn expand_asm_format(ecx: &mut ExtCtxt, sp: Span, tts: &[TokenTree]) -> Box<
         }
     }
 
-    cx.expr.clobbers = token::intern_and_get_ident(clobs.connect(","));
+    let clobbers = format!("~\\{{}\\}", clobs.connect("},~{"));
+    cx.expr.clobbers = token::intern_and_get_ident(clobbers);
 
     let asm_expr = p.parse_expr();
-    let (asm_str, style) = match expr_to_str(cx.ecx, asm_expr,
+    let (asm_str, _) = match expr_to_str(cx.ecx, asm_expr,
                                        "inline assembly must be a string literal.") {
         Some(tuple) => tuple,
-        // let compilation continue
+        // let the compilation continue
         None => return DummyResult::expr(sp),
     };
-
-    // apieces.push((s, asm_expr.span));
 
     let mut named = false;
     while p.token != token::EOF {
@@ -371,53 +391,54 @@ pub fn expand_asm_format(ecx: &mut ExtCtxt, sp: Span, tts: &[TokenTree]) -> Box<
         }
     }
 
-    // let mut pieces = Vec::new();
-    // for &(ref pcs, ref pspan) in apieces.iter() {
-    //     for &p in cx.format_pieces(pcs, *pspan).iter() {
-    //         pieces.push(p);
-    //     }
-    // }
     // Translation of pieces.
     let pieces = cx.format_pieces(&asm_str, asm_expr.span);
 
-    cx.num_outputs += cx.arg_outputs.len();
-    cx.num_named_outputs += cx.named_outputs.len();
-    cx.num_inputs += cx.arg_inputs.len();
-
-    let offset_named_outputs = cx.num_outputs;
-    let offset_inputs = offset_named_outputs + cx.num_named_outputs;
-    let offset_named_inputs = offset_inputs + cx.num_inputs;
-
-    // Transcription of pieces.
-    for &p in pieces.iter() {
-        match p {
-            String(s) => cx.asm_str.push_str(s),
-            Output(i) => cx.asm_str.push_str("$" + i.to_str()),
-            OutputNamed(i) => cx.asm_str.push_str("$" + (i + offset_named_outputs).to_str()),
-            Input(n) => cx.asm_str.push_str("$" + (n + offset_inputs).to_str()),
-            InputNamed(n) => cx.asm_str.push_str("$" + (n + offset_named_inputs).to_str())
-        }
-    }
+    let offset_named_outputs = cx.expr.outputs.len() + cx.arg_outputs.len();
+    let offset_inputs = offset_named_outputs + cx.named_outputs.len();
+    let offset_named_inputs = offset_inputs + cx.expr.inputs.len() + cx.arg_inputs.len();
 
     for &(ref a, ref b) in cx.named_outputs.iter() {
-        match cx.names.get(a) {
-            &(_, Some(out)) | &(out, _) => {
+        match cx.names.find(a) {
+            Some(&(_, Some(out))) | Some(&(out, _)) => {
                 cx.expr.outputs.push((token::intern_and_get_ident("=" + *b), out));
+            }
+            None => {
+                cx.ecx.span_err(sp, "no such named output");
+                return DummyResult::expr(sp);
             }
         }
     }
 
     for &(ref a, ref b) in cx.named_inputs.iter() {
-        match cx.names.get(a) {
-            &(inp, _) => {
+        match cx.names.find(a) {
+            Some(&(inp, _)) => {
                 cx.expr.inputs.push((token::intern_and_get_ident(*b), inp));
+            }
+            None => {
+                cx.ecx.span_err(sp, "no such named input");
+                return DummyResult::expr(sp);
+            }
+        }
+    }
+
+    // Transcription and concatenation of pieces.
+    let mut strs = pieces.iter().map(|p| match p {
+        &String(s) => String(s),
+        &Output(n) => Output(n),
+        &OutputNamed(n) => OutputNamed(n + offset_named_outputs),
+        &Input(n) => Input(n + offset_inputs),
+        &InputNamed(n) => InputNamed(n + offset_named_inputs)
+    });
+    for p in strs {
+        match p {
+            String(s) => cx.asm_str.push_str(s),
+            Output(i) | OutputNamed(i) | Input(i) | InputNamed(i) => {
+                cx.asm_str.push_char('$');
+                cx.asm_str.push_str(i.to_str());
             }
         }
     }
 
     cx.into_expr(sp)
-}
-
-// TODO
-fn verify_piece(cx: &mut Context, p: &fmt_macros::Piece) {
 }
