@@ -217,7 +217,7 @@ impl<'a, 'b> Context<'a, 'b> {
 
         match parser.errors.shift() {
             Some(error) => {
-                self.ecx.span_err(sp, "invalid format string: " + error);
+                self.ecx.span_err(sp, "invalid format string: " + error.as_slice());
                 self.dummy = Some(DummyResult::expr(sp));
             }
             None => {}
@@ -228,10 +228,10 @@ impl<'a, 'b> Context<'a, 'b> {
     fn into_expr(mut self, sp: Span) -> Box<MacResult> {
         //-----
         println!("{}", self.asm_str);
-        for &(ref a, _) in self.expr.inputs.clone().iter() {
+        for (a, _) in self.expr.inputs.clone().move_iter() {
             println!("in: {}", a)
         }
-        for &(ref a, _) in self.expr.outputs.clone().iter() {
+        for (a, _) in self.expr.outputs.clone().move_iter() {
             println!("out: {}", a)
         }
         //-----
