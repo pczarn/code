@@ -48,7 +48,9 @@ struct Context<'a, 'b> {
 
     // Parsed argument expressions and the types that we've found so far for
     // them.
+    // TODO try to use HashMap<(uint, ~str), uint>
     args: Vec<(@ast::Expr, Option<@ast::Expr>)>,
+    // as used in the string
     arg_outputs: Vec<(uint, ~str)>,
     arg_inputs: Vec<(uint, ~str)>,
     // Parsed named expressions and the types that we've found for them so far.
@@ -56,6 +58,7 @@ struct Context<'a, 'b> {
     // found to be sure that we can translate them in the same order that they
     // were declared in.
     names: HashMap<~str, (@ast::Expr, Option<@ast::Expr>)>,
+    // as used in the string
     named_outputs: Vec<(~str, ~str)>,
     named_inputs: Vec<(~str, ~str)>,
 
@@ -64,6 +67,17 @@ struct Context<'a, 'b> {
 
     // Updated as arguments are consumed or methods are entered
     next_argument: uint,
+}
+
+fn fetch_idx<T: Eq>(arg: &mut Vec<T>, key: T) -> uint {
+    match arg.as_slice().position_elem(&key) {
+        Some(idx) => idx,
+        None => {
+            let last_idx = arg.len();
+            arg.push(key);
+            last_idx
+        }
+    }
 }
 
 impl<'a, 'b> Context<'a, 'b> {
@@ -82,68 +96,28 @@ impl<'a, 'b> Context<'a, 'b> {
                 },
                 method: None,
             }) => {
-                let (args, named) = match (align, pos) {
-                    (AlignLeft, ArgumentNext) | (AlignLeft, ArgumentIs(_)) => {
-                        (Some(&mut self.arg_outputs), None)
-                    }
-                    (AlignUnknown, ArgumentNext) | (AlignUnknown, ArgumentIs(_)) => {
-                        (Some(&mut self.arg_inputs), None)
-                    }
-                    (AlignLeft, ArgumentNamed(_)) => {
-                        (None, Some(&mut self.named_outputs))
-                    }
-                    (AlignUnknown, ArgumentNamed(_)) => {
-                        (None, Some(&mut self.named_inputs))
-                    }
-                    _ => fail!("invalid align")
-                };
-
-                let (key, name_key) = match pos {
+                let key = match pos {
                     ArgumentNext => {
                         let key = self.next_argument;
                         self.next_argument += 1;
-                        (Some((key, ty.to_owned())), None)
+                        key
                     }
-                    ArgumentIs(n) => (Some((n, ty.to_owned())), None),
-                    ArgumentNamed(name) => (None, Some((name.to_owned(), ty.to_owned())))
-                };
-
-                let idx = match (args, key, named, name_key) {
-                    (Some(arg), Some(key), _, _) => {
-                        match arg.as_slice().position_elem(&key) {
-                            Some(idx) => idx,
-                            None => {
-                                let last_idx = arg.len();
-                                arg.push(key);
-                                last_idx
-                            }
-                        }
-                    }
-                    (_, _, Some(arg), Some(key)) => {
-                        match arg.as_slice().position_elem(&key) {
-                            Some(idx) => idx,
-                            None => {
-                                let last_idx = arg.len();
-                                arg.push(key);
-                                last_idx
-                            }
-                        }
-                    }
-                    _ => fail!("")
+                    ArgumentIs(n) => n,
+                    ArgumentNamed(_) => 0
                 };
 
                 match (align, pos) {
                     (AlignLeft, ArgumentNext) | (AlignLeft, ArgumentIs(_)) => {
-                        Output(idx)
+                        Output(fetch_idx(&mut self.arg_outputs, (key, ty.to_owned())))
                     }
                     (AlignUnknown, ArgumentNext) | (AlignUnknown, ArgumentIs(_)) => {
-                        Input(idx)
+                        Input(fetch_idx(&mut self.arg_inputs, (key, ty.to_owned())))
                     }
-                    (AlignLeft, ArgumentNamed(_)) => {
-                        OutputNamed(idx)
+                    (AlignLeft, ArgumentNamed(name)) => {
+                        OutputNamed(fetch_idx(&mut self.named_outputs, (name.to_owned(), ty.to_owned())))
                     }
-                    (AlignUnknown, ArgumentNamed(_)) => {
-                        InputNamed(idx)
+                    (AlignUnknown, ArgumentNamed(name)) => {
+                        InputNamed(fetch_idx(&mut self.named_inputs, (name.to_owned(), ty.to_owned())))
                     }
                     _ => fail!("invalid align")
                 }
@@ -398,6 +372,30 @@ pub fn expand_asm_format(ecx: &mut ExtCtxt, sp: Span, tts: &[TokenTree]) -> Box<
     let offset_named_outputs = cx.expr.outputs.len() + cx.arg_outputs.len();
     let offset_inputs = offset_named_outputs + cx.named_outputs.len();
     let offset_named_inputs = offset_inputs + cx.expr.inputs.len() + cx.arg_inputs.len();
+
+    for &(a, ref b) in cx.arg_outputs.iter() {
+        match cx.args.get(a) {
+            &(_, Some(out)) | &(out, _) if a < cx.args.len() => {
+                cx.expr.outputs.push((token::intern_and_get_ident("=" + *b), out));
+            }
+            _ => {
+                cx.ecx.span_err(sp, "no such output");
+                return DummyResult::expr(sp);
+            }
+        }
+    }
+
+    for &(a, ref b) in cx.arg_inputs.iter() {
+        match cx.args.get(a) {
+            &(out, _) if a < cx.args.len() => {
+                cx.expr.inputs.push((token::intern_and_get_ident(*b), out));
+            }
+            _ => {
+                cx.ecx.span_err(sp, "no such input");
+                return DummyResult::expr(sp);
+            }
+        }
+    }
 
     for &(ref a, ref b) in cx.named_outputs.iter() {
         match cx.names.find(a) {
