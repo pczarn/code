@@ -325,18 +325,18 @@ pub fn expand_asm_format(ecx: &mut ExtCtxt, sp: Span, tts: &[TokenTree]) -> Box<
             named = true;
             match tok_str {
                 Some((s, _)) => {
+                    // "sel" = in_expr
                     p.expect(&token::EQ);
                     let e = p.parse_expr();
                     cx.expr.inputs.push((s.clone(), e));
-                    cx.num_inputs += 1;
-                    if p.token == token::RARROW {
-                        p.bump();
+                    if p.eat(&token::RARROW) {
+                        // -> out_expr
                         let out = p.parse_expr();
                         cx.expr.outputs.push((token::intern_and_get_ident("=" + s.get()), out));
-                        cx.num_outputs += 1;
                     }
                 }
                 None => {
+                    // ident = in_expr
                     let ident = match p.token {
                         token::IDENT(i, _) => {
                             p.bump();
@@ -368,8 +368,8 @@ pub fn expand_asm_format(ecx: &mut ExtCtxt, sp: Span, tts: &[TokenTree]) -> Box<
                         }
                     }
 
-                    if p.token == token::RARROW {
-                        p.bump();
+                    if p.eat(&token::RARROW) {
+                        // -> out_expr
                         let out = p.parse_expr();
                         cx.names.insert(name.to_str(), (e, Some(out)));
                     }
@@ -379,9 +379,10 @@ pub fn expand_asm_format(ecx: &mut ExtCtxt, sp: Span, tts: &[TokenTree]) -> Box<
                 }
             }
         } else {
+            // in_expr
             let e = p.parse_expr();
-            if p.token == token::RARROW {
-                p.bump();
+            if p.eat(&token::RARROW) {
+                // -> out_expr
                 let out = p.parse_expr();
                 cx.args.push((e, Some(out)));
             }
