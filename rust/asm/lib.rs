@@ -50,26 +50,30 @@ struct Context<'a, 'b> {
     // them.
     // TODO try to use HashMap<(uint, ~str), uint>
     args: Vec<(@ast::Expr, Option<@ast::Expr>, Option<uint>)>,
-    // as used in the string
+    // as used in the string. (args_idx, ty)
     arg_outputs: Vec<(uint, ~str)>,
     arg_inputs: Vec<(uint, ~str)>,
     // Parsed named expressions and the types that we've found for them so far.
     // Note that we keep a side-array of the ordering of the named arguments
     // found to be sure that we can translate them in the same order that they
     // were declared in.
-    names: HashMap<~str, (@ast::Expr, Option<@ast::Expr>)>,
+    // names: HashMap<~str, (@ast::Expr, Option<@ast::Expr>)>,
     // as used in the string
-    named_outputs: Vec<(~str, ~str)>,
-    named_inputs: Vec<(~str, ~str)>,
+    // named_outputs: Vec<(~str, ~str)>,
+    // named_inputs: Vec<(~str, ~str)>,
+
+    // an index into args
+    names: HashMap<~str, uint>,
 
     // Collection of strings
-    name_positions: HashMap<~str, uint>,
+    // name_positions: HashMap<~str, uint>,
 
     // Updated as arguments are consumed or methods are entered
     next_argument: uint,
 }
 
-fn fetch_idx<T: Eq>(arg: &mut Vec<T>, key: T) -> uint {
+#[inline]
+fn fetch_idx(arg: &mut Vec<(uint, ~str)>, key: (uint, ~str)) -> uint {
     match arg.as_slice().position_elem(&key) {
         Some(idx) => idx,
         None => {
@@ -103,22 +107,25 @@ impl<'a, 'b> Context<'a, 'b> {
                         key
                     }
                     ArgumentIs(n) => n,
-                    ArgumentNamed(_) => 0
+                    ArgumentNamed(name) => match self.names.find(&name.to_owned()) {
+                        Some(&n) => n,
+                        None => fail!("todo: return dummy on unknown name")
+                    }
                 };
 
                 match (align, pos) {
-                    (AlignLeft, ArgumentNext) | (AlignLeft, ArgumentIs(_)) => {
+                    (AlignLeft, _) => {
                         Output(fetch_idx(&mut self.arg_outputs, (key, ty.to_owned())))
                     }
-                    (AlignUnknown, ArgumentNext) | (AlignUnknown, ArgumentIs(_)) => {
+                    (AlignUnknown, _) => {
                         Input(fetch_idx(&mut self.arg_inputs, (key, ty.to_owned())))
                     }
-                    (AlignLeft, ArgumentNamed(name)) => {
-                        OutputNamed(fetch_idx(&mut self.named_outputs, (name.to_owned(), ty.to_owned())))
-                    }
-                    (AlignUnknown, ArgumentNamed(name)) => {
-                        InputNamed(fetch_idx(&mut self.named_inputs, (name.to_owned(), ty.to_owned())))
-                    }
+                    // (AlignLeft, ArgumentNamed(name)) => {
+                    //     OutputNamed(fetch_idx(&mut self.named_outputs, (name.to_owned(), ty.to_owned())))
+                    // }
+                    // (AlignUnknown, ArgumentNamed(name)) => {
+                    //     InputNamed(fetch_idx(&mut self.named_inputs, (name.to_owned(), ty.to_owned())))
+                    // }
                     _ => fail!("invalid align")
                 }
             }
@@ -233,9 +240,6 @@ pub fn expand_asm_format(ecx: &mut ExtCtxt, sp: Span, tts: &[TokenTree]) -> Box<
         arg_outputs: Vec::new(),
         arg_inputs: Vec::new(),
         names: HashMap::new(),
-        name_positions: HashMap::new(),
-        named_outputs: Vec::new(),
-        named_inputs: Vec::new(),
         next_argument: 0,
         asm_str: StrBuf::new(),
         expr: ast::InlineAsm {
@@ -335,20 +339,24 @@ pub fn expand_asm_format(ecx: &mut ExtCtxt, sp: Span, tts: &[TokenTree]) -> Box<
                     let e = p.parse_expr();
                     match cx.names.find_equiv(&name) {
                         None => {}
-                        Some(&(prev, _)) => {
+                        Some(&idx) => match cx.args.get(idx) {
+                            &(prev, _, _) => {
                             cx.ecx.span_err(e.span, format!("duplicate argument named `{}`", name));
                             cx.ecx.parse_sess.span_diagnostic.span_note(prev.span, "previously here");
                             continue
+                            }
                         }
                     }
+
+                    cx.names.insert(name.to_str(), cx.args.len());
 
                     if p.eat(&token::RARROW) {
                         // -> out_expr
                         let out = p.parse_expr();
-                        cx.names.insert(name.to_str(), (e, Some(out)));
+                        cx.args.push((e, Some(out), None));
                     }
                     else {
-                        cx.names.insert(name.to_str(), (e, None));
+                        cx.args.push((e, None, None));
                     }
                 }
             }
@@ -372,7 +380,7 @@ pub fn expand_asm_format(ecx: &mut ExtCtxt, sp: Span, tts: &[TokenTree]) -> Box<
 
     let offset_outputs = cx.expr.outputs.len();
     let offset_named_outputs = offset_outputs + cx.arg_outputs.len();
-    let offset_inputs = offset_named_outputs + cx.named_outputs.len() + cx.expr.inputs.len();
+    let offset_inputs = offset_named_outputs + /*cx.named_outputs.len() +*/ cx.expr.inputs.len();
     let offset_named_inputs = offset_inputs + cx.arg_inputs.len();
 
     let len = cx.args.len();
@@ -413,29 +421,29 @@ pub fn expand_asm_format(ecx: &mut ExtCtxt, sp: Span, tts: &[TokenTree]) -> Box<
         }
     }
 
-    for &(ref a, ref b) in cx.named_outputs.iter() {
-        match cx.names.find(a) {
-            Some(&(_, Some(out))) | Some(&(out, _)) => {
-                cx.expr.outputs.push((token::intern_and_get_ident("=" + *b), out));
-            }
-            None => {
-                cx.ecx.span_err(sp, "no such named output");
-                return DummyResult::expr(sp);
-            }
-        }
-    }
+    // for &(ref a, ref b) in cx.named_outputs.iter() {
+    //     match cx.names.find(a) {
+    //         Some(&(_, Some(out))) | Some(&(out, _)) => {
+    //             cx.expr.outputs.push((token::intern_and_get_ident("=" + *b), out));
+    //         }
+    //         None => {
+    //             cx.ecx.span_err(sp, "no such named output");
+    //             return DummyResult::expr(sp);
+    //         }
+    //     }
+    // }
 
-    for &(ref a, ref b) in cx.named_inputs.iter() {
-        match cx.names.find(a) {
-            Some(&(inp, _)) => {
-                cx.expr.inputs.push((token::intern_and_get_ident(*b), inp));
-            }
-            None => {
-                cx.ecx.span_err(sp, "no such named input");
-                return DummyResult::expr(sp);
-            }
-        }
-    }
+    // for &(ref a, ref b) in cx.named_inputs.iter() {
+    //     match cx.names.find(a) {
+    //         Some(&(inp, _)) => {
+    //             cx.expr.inputs.push((token::intern_and_get_ident(*b), inp));
+    //         }
+    //         None => {
+    //             cx.ecx.span_err(sp, "no such named input");
+    //             return DummyResult::expr(sp);
+    //         }
+    //     }
+    // }
 
     // Transcription and concatenation of pieces.
     let mut strs = pieces.iter().map(|p| match p {
