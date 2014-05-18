@@ -35,9 +35,7 @@ pub fn macro_registrar(register: |Name, SyntaxExtension|) {
 enum AsmPiece<'a> {
     String(&'a str),
     Output(uint),
-    OutputNamed(uint),
     Input(uint),
-    InputNamed(uint)
 }
 
 struct Context<'a, 'b> {
@@ -53,20 +51,9 @@ struct Context<'a, 'b> {
     // as used in the string. (args_idx, ty)
     arg_outputs: Vec<(uint, ~str)>,
     arg_inputs: Vec<(uint, ~str)>,
-    // Parsed named expressions and the types that we've found for them so far.
-    // Note that we keep a side-array of the ordering of the named arguments
-    // found to be sure that we can translate them in the same order that they
-    // were declared in.
-    // names: HashMap<~str, (@ast::Expr, Option<@ast::Expr>)>,
-    // as used in the string
-    // named_outputs: Vec<(~str, ~str)>,
-    // named_inputs: Vec<(~str, ~str)>,
 
-    // an index into args
+    // Names of parsed named expressions mapped to their index into args.
     names: HashMap<~str, uint>,
-
-    // Collection of strings
-    // name_positions: HashMap<~str, uint>,
 
     // Updated as arguments are consumed or methods are entered
     next_argument: uint,
@@ -85,7 +72,7 @@ fn fetch_idx(arg: &mut Vec<(uint, ~str)>, key: (uint, ~str)) -> uint {
 }
 
 impl<'a, 'b> Context<'a, 'b> {
-    fn trans_piece<'a>(&mut self, piece: fmt_macros::Piece<'a>) -> AsmPiece<'a> {
+    fn trans_piece<'a>(&mut self, piece: fmt_macros::Piece<'a>, sp: Span) -> AsmPiece<'a> {
         use fmt_macros::{Argument, ArgumentNext, ArgumentIs, ArgumentNamed,
             CountImplied, FormatSpec, AlignUnknown, AlignLeft};
 
@@ -109,23 +96,22 @@ impl<'a, 'b> Context<'a, 'b> {
                     ArgumentIs(n) => n,
                     ArgumentNamed(name) => match self.names.find(&name.to_owned()) {
                         Some(&n) => n,
-                        None => fail!("todo: return dummy on unknown name")
+                        None => {
+                            self.ecx.span_err(sp, format!("there is no argument named `{}`",
+                                                            name));
+                            self.dummy = Some(DummyResult::expr(sp));
+                            return String("");
+                        }
                     }
                 };
 
-                match (align, pos) {
-                    (AlignLeft, _) => {
+                match align {
+                    AlignLeft => {
                         Output(fetch_idx(&mut self.arg_outputs, (key, ty.to_owned())))
                     }
-                    (AlignUnknown, _) => {
+                    AlignUnknown => {
                         Input(fetch_idx(&mut self.arg_inputs, (key, ty.to_owned())))
                     }
-                    // (AlignLeft, ArgumentNamed(name)) => {
-                    //     OutputNamed(fetch_idx(&mut self.named_outputs, (name.to_owned(), ty.to_owned())))
-                    // }
-                    // (AlignUnknown, ArgumentNamed(name)) => {
-                    //     InputNamed(fetch_idx(&mut self.named_inputs, (name.to_owned(), ty.to_owned())))
-                    // }
                     _ => fail!("invalid align")
                 }
             }
@@ -185,12 +171,11 @@ impl<'a, 'b> Context<'a, 'b> {
         let asm_str = s.get();
         let mut parser = fmt_macros::Parser::new(asm_str);
         loop {
-            let n = parser.next();
-            match n {
+            match parser.next() {
                 Some(piece) => {
                     if parser.errors.len() > 0 { break }
                     // self.verify_piece(&piece);
-                    pieces.push(self.trans_piece(piece));
+                    pieces.push(self.trans_piece(piece, sp));
                 }
                 None => break
             }
@@ -328,8 +313,9 @@ pub fn expand_asm_format(ecx: &mut ExtCtxt, sp: Span, tts: &[TokenTree]) -> Box<
                         }
                         _ => {
                             cx.ecx.span_err(p.span,
-                                         format!("expected ident for named argument, but found `{}`",
-                                                 p.this_token_to_str()));
+                                        format!("expected ident for named argument, \
+                                                but found `{}`",
+                                                p.this_token_to_str()));
                             return DummyResult::expr(sp);
                         }
                     };
@@ -341,9 +327,11 @@ pub fn expand_asm_format(ecx: &mut ExtCtxt, sp: Span, tts: &[TokenTree]) -> Box<
                         None => {}
                         Some(&idx) => match cx.args.get(idx) {
                             &(prev, _, _) => {
-                            cx.ecx.span_err(e.span, format!("duplicate argument named `{}`", name));
-                            cx.ecx.parse_sess.span_diagnostic.span_note(prev.span, "previously here");
-                            continue
+                                cx.ecx.span_err(e.span,
+                                                format!("duplicate argument named `{}`", name));
+                                cx.ecx.parse_sess.span_diagnostic.span_note(prev.span,
+                                                                            "previously here");
+                                continue
                             }
                         }
                     }
@@ -379,9 +367,7 @@ pub fn expand_asm_format(ecx: &mut ExtCtxt, sp: Span, tts: &[TokenTree]) -> Box<
     let pieces = cx.format_pieces(&asm_str, asm_expr.span);
 
     let offset_outputs = cx.expr.outputs.len();
-    let offset_named_outputs = offset_outputs + cx.arg_outputs.len();
-    let offset_inputs = offset_named_outputs + /*cx.named_outputs.len() +*/ cx.expr.inputs.len();
-    let offset_named_inputs = offset_inputs + cx.arg_inputs.len();
+    let offset_inputs = offset_outputs + cx.arg_outputs.len() + cx.expr.inputs.len();
 
     let len = cx.args.len();
     for &(a, ref b) in cx.arg_outputs.mut_iter() {
@@ -393,11 +379,7 @@ pub fn expand_asm_format(ecx: &mut ExtCtxt, sp: Span, tts: &[TokenTree]) -> Box<
                         cx.expr.outputs.push((token::intern_and_get_ident("=" + *b), out));
                     }
                 }
-                // cx.args.set(a, t);
             }
-            // &(out, _) if a < cx.args.len() => {
-                // cx.expr.outputs.push((token::intern_and_get_ident("=" + *b), out));
-            // }
             _ => {
                 cx.ecx.span_err(sp, "no such output");
                 return DummyResult::expr(sp);
@@ -407,7 +389,6 @@ pub fn expand_asm_format(ecx: &mut ExtCtxt, sp: Span, tts: &[TokenTree]) -> Box<
 
     for &(a, ref b) in cx.arg_inputs.iter() {
         match cx.args.get(a) {
-            // &(out, Some(_)) if a < cx.args.len()
             &(out, _, None) if a < cx.args.len() => {
                 cx.expr.inputs.push((token::intern_and_get_ident(*b), out));
             }
@@ -421,42 +402,17 @@ pub fn expand_asm_format(ecx: &mut ExtCtxt, sp: Span, tts: &[TokenTree]) -> Box<
         }
     }
 
-    // for &(ref a, ref b) in cx.named_outputs.iter() {
-    //     match cx.names.find(a) {
-    //         Some(&(_, Some(out))) | Some(&(out, _)) => {
-    //             cx.expr.outputs.push((token::intern_and_get_ident("=" + *b), out));
-    //         }
-    //         None => {
-    //             cx.ecx.span_err(sp, "no such named output");
-    //             return DummyResult::expr(sp);
-    //         }
-    //     }
-    // }
-
-    // for &(ref a, ref b) in cx.named_inputs.iter() {
-    //     match cx.names.find(a) {
-    //         Some(&(inp, _)) => {
-    //             cx.expr.inputs.push((token::intern_and_get_ident(*b), inp));
-    //         }
-    //         None => {
-    //             cx.ecx.span_err(sp, "no such named input");
-    //             return DummyResult::expr(sp);
-    //         }
-    //     }
-    // }
-
     // Transcription and concatenation of pieces.
     let mut strs = pieces.iter().map(|p| match p {
         &String(s) => String(s),
         &Output(n) => Output(n + offset_outputs),
-        &OutputNamed(n) => OutputNamed(n + offset_named_outputs),
         &Input(n) => Input(n + offset_inputs),
-        &InputNamed(n) => InputNamed(n + offset_named_inputs)
     });
+
     for p in strs {
         match p {
             String(s) => cx.asm_str.push_str(s),
-            Output(i) | OutputNamed(i) | Input(i) | InputNamed(i) => {
+            Output(i) | Input(i) => {
                 cx.asm_str.push_char('$');
                 cx.asm_str.push_str(i.to_str());
             }
