@@ -5,4 +5,4 @@ RUSTC := rustc-stage2
 all: lib
 
 lib: lib.rs
-	$(RUSTC) -Z verbose --crate-type=dylib -O $^ --out-dir .
+	$(RUSTC) -Z verbose -O $^ --out-dir .

@@ -49,7 +49,7 @@ struct Context<'a, 'b> {
     // Parsed argument expressions and the types that we've found so far for
     // them.
     // TODO try to use HashMap<(uint, ~str), uint>
-    args: Vec<(@ast::Expr, Option<@ast::Expr>)>,
+    args: Vec<(@ast::Expr, Option<@ast::Expr>, Option<uint>)>,
     // as used in the string
     arg_outputs: Vec<(uint, ~str)>,
     arg_inputs: Vec<(uint, ~str)>,
@@ -202,11 +202,11 @@ impl<'a, 'b> Context<'a, 'b> {
     fn into_expr(mut self, sp: Span) -> Box<MacResult> {
         //-----
         println!("{}", self.asm_str);
-        for (a, _) in self.expr.inputs.clone().move_iter() {
-            println!("in: {}", a)
-        }
         for (a, _) in self.expr.outputs.clone().move_iter() {
             println!("out: {}", a)
+        }
+        for (a, _) in self.expr.inputs.clone().move_iter() {
+            println!("in: {}", a)
         }
         //-----
         self.expr.asm = token::intern_and_get_ident(self.asm_str.as_slice());
@@ -358,10 +358,11 @@ pub fn expand_asm_format(ecx: &mut ExtCtxt, sp: Span, tts: &[TokenTree]) -> Box<
             if p.eat(&token::RARROW) {
                 // -> out_expr
                 let out = p.parse_expr();
-                cx.args.push((e, Some(out)));
+                cx.args.push((e, Some(out), None));
+                // TODO ensure out_expr = in_expr?
             }
             else {
-                cx.args.push((e, None));
+                cx.args.push((e, None, None));
             }
         }
     }
@@ -369,15 +370,26 @@ pub fn expand_asm_format(ecx: &mut ExtCtxt, sp: Span, tts: &[TokenTree]) -> Box<
     // Translation of pieces.
     let pieces = cx.format_pieces(&asm_str, asm_expr.span);
 
-    let offset_named_outputs = cx.expr.outputs.len() + cx.arg_outputs.len();
-    let offset_inputs = offset_named_outputs + cx.named_outputs.len();
-    let offset_named_inputs = offset_inputs + cx.expr.inputs.len() + cx.arg_inputs.len();
+    let offset_outputs = cx.expr.outputs.len();
+    let offset_named_outputs = offset_outputs + cx.arg_outputs.len();
+    let offset_inputs = offset_named_outputs + cx.named_outputs.len() + cx.expr.inputs.len();
+    let offset_named_inputs = offset_inputs + cx.arg_inputs.len();
 
-    for &(a, ref b) in cx.arg_outputs.iter() {
-        match cx.args.get(a) {
-            &(_, Some(out)) | &(out, _) if a < cx.args.len() => {
-                cx.expr.outputs.push((token::intern_and_get_ident("=" + *b), out));
+    let len = cx.args.len();
+    for &(a, ref b) in cx.arg_outputs.mut_iter() {
+        match cx.args.get_mut(a) {
+            ref mut t if a < len => {
+                *t.mut2() = Some(cx.expr.outputs.len());
+                match *t {
+                    &(_, Some(out), _) | &(out, _, _) => {
+                        cx.expr.outputs.push((token::intern_and_get_ident("=" + *b), out));
+                    }
+                }
+                // cx.args.set(a, t);
             }
+            // &(out, _) if a < cx.args.len() => {
+                // cx.expr.outputs.push((token::intern_and_get_ident("=" + *b), out));
+            // }
             _ => {
                 cx.ecx.span_err(sp, "no such output");
                 return DummyResult::expr(sp);
@@ -387,8 +399,12 @@ pub fn expand_asm_format(ecx: &mut ExtCtxt, sp: Span, tts: &[TokenTree]) -> Box<
 
     for &(a, ref b) in cx.arg_inputs.iter() {
         match cx.args.get(a) {
-            &(out, _) if a < cx.args.len() => {
+            // &(out, Some(_)) if a < cx.args.len()
+            &(out, _, None) if a < cx.args.len() => {
                 cx.expr.inputs.push((token::intern_and_get_ident(*b), out));
+            }
+            &(out, _, Some(idx)) if a < cx.args.len() => {
+                cx.expr.inputs.push((token::intern_and_get_ident(idx.to_str()), out));
             }
             _ => {
                 cx.ecx.span_err(sp, "no such input");
@@ -424,7 +440,7 @@ pub fn expand_asm_format(ecx: &mut ExtCtxt, sp: Span, tts: &[TokenTree]) -> Box<
     // Transcription and concatenation of pieces.
     let mut strs = pieces.iter().map(|p| match p {
         &String(s) => String(s),
-        &Output(n) => Output(n),
+        &Output(n) => Output(n + offset_outputs),
         &OutputNamed(n) => OutputNamed(n + offset_named_outputs),
         &Input(n) => Input(n + offset_inputs),
         &InputNamed(n) => InputNamed(n + offset_named_inputs)
