@@ -14,7 +14,7 @@ static MASK: uint = SIZE - 1;
 
 type TriAry<H, K, V> = ([H, ..SIZE], [K, ..SIZE], [V, ..SIZE]);
 
-struct TriAryIter<'a, H, K, V> {
+struct VecTriArys<'a, H, K, V> {
     end: *mut TriAry<H, K, V>,
     ptr: *mut TriAry<H, K, V>,
     key: *mut TriAry<H, K, V>,
@@ -23,15 +23,15 @@ struct TriAryIter<'a, H, K, V> {
     marker2: marker::NoCopy
 }
 
-impl<'a, H, K, V> Iterator<AryIter<'a, H, K, V>> for TriAryIter<'a, H, K, V> {
-    fn next(&mut self) -> Option<AryIter<H, K, V>> {
+impl<'a, H, K, V> Iterator<TriAryItems<'a, H, K, V>> for VecTriArys<'a, H, K, V> {
+    fn next(&mut self) -> Option<TriAryItems<H, K, V>> {
         if self.ptr == self.end {
             None
         } else {
             unsafe {
                 // align issue?
                 let next_ptr = self.ptr.offset(1);
-                let r = AryIter {
+                let r = TriAryItems {
                     ptr: self.ptr as *mut H,
                     key: self.key as *mut K,
                     val: self.val as *mut V,
@@ -48,7 +48,7 @@ impl<'a, H, K, V> Iterator<AryIter<'a, H, K, V>> for TriAryIter<'a, H, K, V> {
     }
 }
 
-struct AryIter<'a, H, K, V> {
+struct TriAryItems<'a, H, K, V> {
     ptr: *mut H,
     key: *mut K,
     val: *mut V,
@@ -57,7 +57,7 @@ struct AryIter<'a, H, K, V> {
     marker2: marker::NoCopy
 }
 
-impl<'a, H, K, V> Iterator<(&'a mut H, &'a mut K, &'a mut V)> for AryIter<'a, H, K, V> {
+impl<'a, H, K, V> Iterator<(&'a mut H, &'a mut K, &'a mut V)> for TriAryItems<'a, H, K, V> {
     fn next(&mut self) -> Option<(&'a mut H, &'a mut K, &'a mut V)> {
         if self.val >= self.end { //or eq
             None
@@ -74,6 +74,52 @@ impl<'a, H, K, V> Iterator<(&'a mut H, &'a mut K, &'a mut V)> for AryIter<'a, H,
                 self.val = self.val.offset(1);
                 Some(r)
             }
+        }
+    }
+}
+
+struct VecTriAryItems<'a, H, K, V> {
+    ptr: *mut H,
+    key: *mut K,
+    val: *mut V,
+    seg_ptr: *mut TriAry<H, K, V>,
+    seg_key: *mut TriAry<H, K, V>,
+    seg_val: *mut TriAry<H, K, V>,
+    segments_end: *mut TriAry<H, K, V>,
+    marker: marker::ContravariantLifetime<'a>,
+    marker2: marker::NoCopy
+}
+
+impl<'a, H, K, V> Iterator<(&'a mut H, &'a mut K, &'a mut V)> for VecTriAryItems<'a, H, K, V> {
+    fn next(&mut self) -> Option<(&'a mut H, &'a mut K, &'a mut V)> {
+        // #![inline]
+        if self.val >= self.seg_ptr as *mut V { //or eq?
+            // use 'likely' (expect)?
+            if self.seg_ptr == self.segments_end {
+                return None;
+            } else {
+                self.ptr = self.seg_ptr as *mut H;
+                self.key = self.seg_key as *mut K;
+                self.val = self.seg_val as *mut V;
+                unsafe {
+                    self.seg_ptr = self.seg_ptr.offset(1);
+                    self.seg_key = self.seg_key.offset(1);
+                    self.seg_val = self.seg_val.offset(1);
+                }
+            }
+        }
+        // cur val < next seg
+        unsafe {
+            // align issue?
+            let r = (
+                &mut *self.ptr,
+                &mut *self.key,
+                &mut *self.val,
+            );
+            self.ptr = self.ptr.offset(1);
+            self.key = self.key.offset(1);
+            self.val = self.val.offset(1);
+            Some(r)
         }
     }
 }
@@ -97,7 +143,7 @@ impl<'a, H, K, V> Iterator<(&'a mut H, &'a mut K, &'a mut V)> for AryIter<'a, H,
 //         let len = v.len();
 //         let koff = (*ptr).mut1() as *mut [uint, ..8] as uint - ptr as uint;
 //         let voff = (*ptr).mut2() as *mut [uint, ..8] as uint - ptr as uint;
-//         let mut iter = TriAryIter {
+//         let mut iter = VecTriArys {
 //             end: ptr.offset(len as int),
 //             ptr: ptr,
 //             key: (ptr as *mut u8).offset(koff as int) as *mut TriAry<u64, uint, uint>,
@@ -116,13 +162,13 @@ impl<'a, H, K, V> Iterator<(&'a mut H, &'a mut K, &'a mut V)> for AryIter<'a, H,
 //     }
 // }
 
-fn mk_iter<'a, H, K, V>(v: &'a mut Vec<TriAry<H, K, V>>) -> TriAryIter<'a, H, K, V> {
+fn mk_iter<'a, H, K, V>(v: &'a mut Vec<TriAry<H, K, V>>) -> VecTriArys<'a, H, K, V> {
     let r = unsafe {
         let ptr = v.as_mut_ptr();
         let len = v.len();
         let koff = (*ptr).mut1() as *mut [K, ..8] as uint - ptr as uint;
         let voff = (*ptr).mut2() as *mut [V, ..8] as uint - ptr as uint;
-        TriAryIter {
+        VecTriArys {
             end: ptr.offset(len as int),
             ptr: ptr,
             key: (ptr as *mut u8).offset(koff as int) as *mut TriAry<H, K, V>,
@@ -134,17 +180,71 @@ fn mk_iter<'a, H, K, V>(v: &'a mut Vec<TriAry<H, K, V>>) -> TriAryIter<'a, H, K,
     r
 }
 
-fn mk_trivec() -> Vec<TriAry<u64, u16, u8>> {
-    // let mut v: Vec<TriAry<u64, u8, u8>> = Vec::new();
+fn mk_iter2<'a, H, K, V>(v: &'a mut Vec<TriAry<H, K, V>>) -> VecTriAryItems<'a, H, K, V> {
+    unsafe {
+        let ptr = v.as_mut_ptr();
+        let next_ptr = ptr.offset(1);
+        let len = v.len();
+        let koff = (*ptr).mut1() as *mut [K, ..8] as uint - ptr as uint;
+        let voff = (*ptr).mut2() as *mut [V, ..8] as uint - ptr as uint;
+        let key = (ptr as *mut u8).offset(koff as int) as *mut TriAry<H, K, V>;
+        let val = (ptr as *mut u8).offset(voff as int) as *mut TriAry<H, K, V>;
+        VecTriAryItems {
+            ptr: ptr as *mut H,
+            key: key as *mut K,
+            val: val as *mut V,
+            seg_ptr: next_ptr,
+            seg_key: key.offset(1),
+            seg_val: val.offset(1),
+            segments_end: ptr.offset(len as int),
+            marker: marker::ContravariantLifetime,
+            marker2: marker::NoCopy
+        }
+    }
+}
+
+fn mk_trivec() -> Vec<TriAry<u64, u64, u64>> {
     let mut v = Vec::new();
     // v.reserve_exact(32);
-    for i in range(0, 128) {
+    for i in range(0, 64) {
         unsafe {
             // v.push(uninit());
             v.push(init());
         }
     }
     v
+}
+
+fn consume<'a, H, K, V>(i:VecTriArys<'a, H, K, V>) {}
+
+#[bench]
+fn fast_iter(b: &mut Bencher) {
+    let mut v = mk_trivec();
+    // let mut iterref = &mut iter;
+    // unsafe {
+        // asm!("" : "+r"(iterref));
+    // }
+
+    let mut n = 0;
+    b.iter(|| {
+        let mut iter = mk_iter2(&mut v);
+        for (h, k, val) in iter {
+            // println!("{:?}", x);
+                *h += 1;
+                *k = (*k + *val) | *val;
+                // *k += 3;
+                *val += 2;
+                // println!("{:?}", iterref);
+                // test::black_box(*k);
+                // consume(iterref);
+                // return;
+                // iterref.next();
+        }
+        // println!("{:?}", v.get(0));
+    });
+    // println!("{:?}", v.get(0));
+    test::black_box(&v);
+    // println!("{:?}", n);
 }
 
 #[bench]
@@ -162,11 +262,89 @@ fn nested_iter(b: &mut Bencher) {
             // println!("{:?}", x);
             for (h, k, val) in x {
                 *h += 1;
-                *k = (*k + (*val as u16)) | (*val as u16);
+                *k = (*k + *val) | *val;
                 // *k += 3;
                 *val += 2;
+                // println!("{:?}", iterref);
                 // test::black_box(*k);
+                // consume(iterref);
+                // return;
+                // iterref.next();
             }
+        }}
+        // println!("{:?}", v.get(0));
+    });
+    // println!("{:?}", v.get(0));
+    test::black_box(&v);
+    // println!("{:?}", n);
+}
+
+#[bench]
+fn nested_iter_counter(b: &mut Bencher) {
+    let mut v = mk_trivec();
+    // let mut iterref = &mut iter;
+    // unsafe {
+        // asm!("" : "+r"(iterref));
+    // }
+    let size = 64*8-3;
+    b.iter(|| {
+        let mut n = 0;
+        let mut iterref = mk_iter(&mut v);
+        for mut x in iterref {
+            for (h, k, val) in x {
+                *h += 1;
+                *k = (*k + *val) | *val;
+                // *k += 3;
+                *val += 2;
+                n += 1;
+                if n > size {
+                    return;
+                }
+            }
+        }
+    });
+    test::black_box(&v);
+}
+
+#[bench]
+fn nested_unwrap_iter(b: &mut Bencher) {
+    let mut v = mk_trivec();
+    // let mut iterref = &mut iter;
+    // unsafe {
+        // asm!("" : "+r"(iterref));
+    // }
+
+    let mut n = 0;
+    b.iter(|| {
+        {let mut iterref = mk_iter(&mut v);
+        let mut triple = iterref.next().unwrap();
+        loop {
+            let (h, k, val) = unsafe {
+                match triple.next() {
+                    Some(t) => t,
+                    None => {
+                        match iterref.next() {
+                            Some(iter) => {
+                                triple = iter;
+                                triple.next().unwrap()
+                            }
+                            None => break
+                        }
+                    }
+                }
+            };
+            // println!("{:?}", x);
+            // for (h, k, val) in x {
+                *h += 1;
+                *k = (*k + *val) | *val;
+                // *k += 3;
+                *val += 2;
+                // println!("{:?}", iterref);
+                // test::black_box(*k);
+                // consume(iterref);
+                // return;
+                // iterref.next();
+            // }
         }}
         // println!("{:?}", v.get(0));
     });
@@ -185,7 +363,7 @@ fn flatmap_iter(b: &mut Bencher) {
         let mut iter = mk_iter(&mut v);
         for (h, k, v) in iter.flat_map(|i| i) {
             *h += 1;
-            *k = (*k + *v as u16) | *v as u16;
+            *k = (*k + *v) | *v;
             *v += 2;
             // test::black_box(*k);
         }
@@ -203,8 +381,8 @@ fn trivec_iter(b: &mut Bencher) {
     let (h, k, val) = unsafe {
         (
             v.as_mut_ptr() as *mut u64,
-            (v.as_mut_ptr() as *mut u16).offset(len as int),
-            (v.as_mut_ptr() as *mut u8).offset((len * 2) as int),
+            (v.as_mut_ptr() as *mut uint).offset(len as int),
+            (v.as_mut_ptr() as *mut uint).offset((len * 2) as int),
         )
     };
 
@@ -214,7 +392,7 @@ fn trivec_iter(b: &mut Bencher) {
             let i = i as int;
             unsafe {
                 *h.offset(i) += 1;
-                *k.offset(i) = (*k.offset(i) + (*val.offset(i) as u16)) | (*val.offset(i) as u16);
+                *k.offset(i) = (*k.offset(i) + *val.offset(i) as uint) | *val.offset(i);
                 *val.offset(i) += 2;
             }
         }
