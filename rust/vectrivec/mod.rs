@@ -35,7 +35,7 @@ impl<'a, H, K, V> Iterator<AryIter<'a, H, K, V>> for TriAryIter<'a, H, K, V> {
                     ptr: self.ptr as *mut H,
                     key: self.key as *mut K,
                     val: self.val as *mut V,
-                    end: next_ptr as *mut V,
+                    end: (self.ptr as *mut H).offset(SIZE as int),
                     marker: marker::ContravariantLifetime,
                     marker2: marker::NoCopy
                 };
@@ -52,14 +52,14 @@ struct AryIter<'a, H, K, V> {
     ptr: *mut H,
     key: *mut K,
     val: *mut V,
-    end: *mut V,
+    end: *mut H,
     marker: marker::ContravariantLifetime<'a>,
     marker2: marker::NoCopy
 }
 
 impl<'a, H, K, V> Iterator<(&'a mut H, &'a mut K, &'a mut V)> for AryIter<'a, H, K, V> {
     fn next(&mut self) -> Option<(&'a mut H, &'a mut K, &'a mut V)> {
-        if self.val >= self.end { //or eq
+        if self.ptr >= self.end { //or eq
             None
         } else {
             unsafe {
