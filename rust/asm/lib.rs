@@ -1,35 +1,31 @@
 #![crate_id = "asm_format#0.11-pre"]
 #![crate_type="dylib"]
-#![feature(managed_boxes, globs, macro_registrar, macro_rules, quote)]
+#![feature(managed_boxes, globs, plugin_registrar, macro_rules, quote)]
 #![experimental]
 
 extern crate syntax;
+extern crate rustc;
 extern crate collections;
 extern crate fmt_macros;
 
 use syntax::ast;
-use syntax::ext::base;
-use syntax::parse;
-use syntax::parse::token::InternedString;
-
-use syntax::ast::{Name, TokenTree};
+use syntax::ast::TokenTree;
 use syntax::codemap::Span;
+use syntax::ext::base;
 use syntax::ext::base::*;
+use syntax::parse;
 use syntax::parse::token;
-
-use collections::HashMap;
+use syntax::parse::token::InternedString;
+use rustc::plugin::Registry;
 
 use std::vec::Vec;
 use std::string::String;
+use std::collections::HashMap;
+use std::gc::{Gc, GC};
 
-#[macro_registrar]
-pub fn macro_registrar(register: |Name, SyntaxExtension|) {
-    register(token::intern("asm_format"),
-        NormalTT(box BasicMacroExpander {
-            expander: expand_asm_format,
-            span: None,
-        },
-        None));
+#[plugin_registrar]
+pub fn registrar(reg: &mut Registry) {
+    reg.register_macro("asm_format", expand_asm_format);
 }
 
 enum AsmPiece<'a> {
@@ -47,7 +43,7 @@ struct Context<'a, 'b> {
     // Parsed argument expressions and the types that we've found so far for
     // them.
     // TODO try to use HashMap<(uint, ~str), uint>
-    args: Vec<(@ast::Expr, Option<@ast::Expr>, Option<uint>)>,
+    args: Vec<(Gc<ast::Expr>, Option<Gc<ast::Expr>>, Option<uint>)>,
     // as used in the string. (args_idx, ty)
     arg_outputs: Vec<(uint, String)>,
     arg_inputs: Vec<(uint, String)>,
@@ -85,7 +81,6 @@ impl<'a, 'b> Context<'a, 'b> {
                     align: align,
                     fill: None, flags: 0, precision: CountImplied, width: CountImplied,
                 },
-                method: None,
             }) => {
                 let key = match pos {
                     ArgumentNext => {
@@ -94,7 +89,7 @@ impl<'a, 'b> Context<'a, 'b> {
                         key
                     }
                     ArgumentIs(n) => n,
-                    ArgumentNamed(name) => match self.names.find(&name.to_owned()) {
+                    ArgumentNamed(name) => match self.names.find(&name.to_string()) {
                         Some(&n) => n,
                         None => {
                             self.ecx.span_err(sp, format!("there is no argument named `{}`",
@@ -107,10 +102,10 @@ impl<'a, 'b> Context<'a, 'b> {
 
                 match align {
                     AlignLeft => {
-                        Output(fetch_idx(&mut self.arg_outputs, (key, ty.to_owned())))
+                        Output(fetch_idx(&mut self.arg_outputs, (key, ty.to_string())))
                     }
                     AlignUnknown => {
-                        Input(fetch_idx(&mut self.arg_inputs, (key, ty.to_owned())))
+                        Input(fetch_idx(&mut self.arg_inputs, (key, ty.to_string())))
                     }
                     _ => fail!("invalid align")
                 }
@@ -157,7 +152,7 @@ impl<'a, 'b> Context<'a, 'b> {
         self.expr.asm = token::intern_and_get_ident(self.asm_str.as_slice());
         match self.dummy {
             Some(e) => e,
-            None => base::MacExpr::new(@ast::Expr {
+            None => base::MacExpr::new(box(GC) ast::Expr {
                 id: ast::DUMMY_NODE_ID,
                 node: ast::ExprInlineAsm(self.expr),
                 span: sp
@@ -207,7 +202,7 @@ pub fn expand_asm_format(ecx: &mut ExtCtxt, sp: Span, tts: &[TokenTree]) -> Box<
                 } else if option.equiv(&("intel")) {
                     cx.expr.dialect = ast::AsmIntel;
                 } else {
-                    clobs.push(option.get().to_owned());
+                    clobs.push(option.get().to_string());
                 }
 
                 p.expect(&token::COMMA);
@@ -216,7 +211,7 @@ pub fn expand_asm_format(ecx: &mut ExtCtxt, sp: Span, tts: &[TokenTree]) -> Box<
         }
     }
 
-    let clobbers = format!("~\\{{}\\}", clobs.connect("},~{"));
+    let clobbers = format!("~{{{}}}", clobs.connect("},~{"));
     cx.expr.clobbers = token::intern_and_get_ident(clobbers.as_slice());
 
     let asm_expr = p.parse_expr();

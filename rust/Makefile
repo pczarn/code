@@ -1,4 +1,4 @@
-RUSTC := rustc-stage2
+RUSTC ?= rustc-stage1
 
 all: inline_test
 	./inline_test
