@@ -1,10 +1,11 @@
-#![crate_id = "macro_regex#0.11-pre"]
+#![crate_name = "macro_regex"]
 #![crate_type="dylib"]
 // #![feature(managed_boxes, globs, macro_registrar, macro_rules, quote)]
-#![feature(globs, macro_registrar, macro_rules, quote, managed_boxes)]
+#![feature(globs, plugin_registrar, macro_rules, quote, managed_boxes)]
 #![experimental]
 
 extern crate syntax;
+extern crate rustc;
 
 use syntax::ast::{Name, TokenTree, Item, MetaItem};
 use syntax::codemap::Span;
@@ -22,17 +23,14 @@ use syntax::parse::attr::ParserAttr;
 
 use syntax::ast::{MatchTok, MatchSeq, MatchNonterminal};
 
-use std::mem;
+use rustc::plugin::Registry;
 
-#[macro_registrar]
-pub fn macro_registrar(register: |Name, SyntaxExtension|) {
-    register(token::intern("macro_regex"),
-        NormalTT(box BasicMacroExpander {
-            expander: add_new_extension,
-            span: None,
-        },
-        None));
-    // register(token::intern("into_foo"), ItemModifier(expand_into_foo));
+use std::mem;
+use std::gc::GC;
+
+#[plugin_registrar]
+pub fn plugin_registrar(reg: &mut Registry) {
+    reg.register_macro("macro_regex", add_new_extension);
 }
 
 fn add_new_extension(cx: &mut ExtCtxt, sp: Span, tts: &[TokenTree])
@@ -117,17 +115,6 @@ impl Program {
         c.insts.push(Save(1));
         c.insts.push(Match);
 
-        // Try to discover a literal string prefix.
-        // This is a bit hacky since we have to skip over the initial
-        // 'Save' instruction.
-        // let mut pre = StrBuf::with_capacity(5);
-        // for inst in c.insts.slice_from(1).iter() {
-        //     match *inst {
-        //         OneChar(c, FLAG_EMPTY) => pre.push_char(c),
-        //         _ => break
-        //     }
-        // }
-
         let Compiler { insts, names } = c;
         let prog = Program {
             insts: insts,
@@ -152,7 +139,7 @@ impl Program {
 
 struct Compiler<'r> {
     insts: Vec<Inst>,
-    names: Vec<Option<StrBuf>>,
+    names: Vec<Option<String>>,
 }
 
 // The compiler implemented here is extremely simple. Most of the complexity
@@ -457,32 +444,6 @@ impl<'r, 't> Nfa<'r, 't> {
                 // }
                 return true
             }
-            // OneChar(c, flags) => {
-            //     if self.char_eq(flags & FLAG_NOCASE > 0, self.chars.prev, c) {
-            //         self.add(nlist, pc+1, caps);
-            //     }
-            // }
-            // CharClass(ref ranges, flags) => {
-            //     if self.chars.prev.is_some() {
-            //         let c = self.chars.prev.unwrap();
-            //         let negate = flags & FLAG_NEGATED > 0;
-            //         let casei = flags & FLAG_NOCASE > 0;
-            //         let found = ranges.as_slice();
-            //         let found = found.bsearch(|&rc| class_cmp(casei, c, rc));
-            //         let found = found.is_some();
-            //         if found ^ negate {
-            //             self.add(nlist, pc+1, caps);
-            //         }
-            //     }
-            // }
-            // Any(flags) => {
-            //     if flags & FLAG_DOTNL > 0
-            //        || !self.char_eq(false, self.chars.prev, '\n') {
-            //         self.add(nlist, pc+1, caps)
-            //     }
-            // }
-            // EmptyBegin(_) | EmptyEnd(_) | EmptyWordBoundary(_)
-            // | Save(_) | Jump(_) | Split(_, _) => {},
             OneTerminal(ref tok) => {
                 if self.parser.eat(tok) {
                     self.add(nlist, pc+1);
@@ -607,7 +568,7 @@ impl<'r, 't> Nfa<'r, 't> {
             "meta" => Some(token::NtMeta(self.parser.parse_meta_item())),
             "tt" => {
               self.parser.quote_depth += 1u; //but in theory, non-quoted tts might be useful
-              let res = token::NtTT(@self.parser.parse_token_tree());
+              let res = token::NtTT(box(GC) self.parser.parse_token_tree());
               self.parser.quote_depth -= 1u;
               Some(res)
             }
