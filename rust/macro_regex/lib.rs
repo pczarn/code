@@ -405,6 +405,7 @@ impl<'r, 't> Nfa<'r, 't> {
             next_ic = self.ic + 1;
 
             for i in range(0, clist.size) {
+                println!("clist i: {}", i);
                 let (pc, popt) = clist.pc(i); // grab pc of i-th current state
                 if self.step(nlist, pc, popt) {
                     matched = true;
@@ -453,7 +454,7 @@ impl<'r, 't> Nfa<'r, 't> {
                         &Some(ref mut p) => p,
                         &None => &mut *self.parser
                     };
-                    println!("{:?} {:?}", parser.token, tok);
+                    // println!("{:?} {:?}", parser.token, tok);
                     parser.token == *tok
                 };
                 if is_match {
@@ -462,29 +463,37 @@ impl<'r, 't> Nfa<'r, 't> {
             }
             OneNonterminal(_, ty, _) => {
                 // let parser = parser.map_or(&*self.parser, |ref p| p);
-                let tt_opt = {
+                let (mut p, ttv) = {
                     let parser = match parser {
                         &Some(ref mut p) => p,
                         &None => &mut *self.parser
                     };
-                    if parse_nt(parser, token::get_ident(ty).get()).is_some() {
-                        Some((parser.sess, parser.cfg.clone(), parser.parse_all_token_trees()))
+                    // println!("pc: {:?}", pc);
+                    let ttv = parser.parse_all_token_trees();
+                    let mut p = parse::new_parser_from_tts(parser.sess,
+                                                           parser.cfg.clone(),
+                                                           ttv.clone());
+                    if parse_nt(&mut p, token::get_ident(ty).get()).is_some() {
+                        (p, ttv)
                     } else {
-                        None
+                        mem::replace(parser, parse::new_parser_from_tts(p.sess,
+                                                           p.cfg.clone(),
+                                                           ttv));
+                        return false;
                     }
                 };
 
-                tt_opt.map(|(sess, cfg, ttv)| {
-                    self.add_with_parser(nlist, pc+1, sess, cfg.clone(), ttv.as_slice());
-                    let p = parse::new_parser_from_tts(sess,
-                                                       cfg.clone(),
-                                                       ttv);
-                    let parser = match parser {
-                        &Some(ref mut p) => p,
-                        &None => &mut *self.parser
-                    };
-                    mem::replace(parser, p);
-                });
+                let ttv2 = p.parse_all_token_trees();
+                let mut p = parse::new_parser_from_tts(p.sess,
+                                                       p.cfg.clone(),
+                                                       ttv.clone());
+
+                self.add_with_parser(nlist, pc+1, p.sess, p.cfg.clone(), ttv2.as_slice());
+                let parser = match parser {
+                    &Some(ref mut p) => p,
+                    &None => &mut *self.parser
+                };
+                mem::replace(parser, p);
             }
             _ => {}
         }
@@ -533,7 +542,7 @@ impl<'r, 't> Nfa<'r, 't> {
             //     }
             // }
             Save(slot) => {
-                nlist.add(pc, true);
+                // nlist.add(pc, true);
                 // match self.which {
                 //     Location if slot <= 1 => {
                 //         let old = groups[slot];
@@ -548,7 +557,7 @@ impl<'r, 't> Nfa<'r, 't> {
                 //         groups[slot] = old;
                 //     }
                 //     Exists | Location => 
-                    self.add(nlist, pc + 1);
+                self.add(nlist, pc + 1);
                 // }
             }
             Jump(to) => {
@@ -593,6 +602,7 @@ impl<'r, 't> Nfa<'r, 't> {
 
 // #[inline]
 fn parse_nt(parser: &mut Parser, name: &str) -> Option<Nonterminal> {
+    println!("{}", name);
     match name {
         "item" => match parser.parse_item(Vec::new()) {
           Some(i) => Some(token::NtItem(i)),
