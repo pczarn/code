@@ -31,17 +31,11 @@ use std::gc::GC;
 
 #[plugin_registrar]
 pub fn plugin_registrar(reg: &mut Registry) {
-    reg.register_macro("macro_regex", add_new_extension);
+    reg.register_macro("matches", matches);
 }
 
-fn add_new_extension(cx: &mut ExtCtxt, sp: Span, tts: &[TokenTree])
+fn matches(cx: &mut ExtCtxt, sp: Span, tts: &[TokenTree])
                    -> Box<MacResult> {
-    // if !tts.is_empty() {
-    //     cx.span_fatal(sp, "make_a_1 takes no arguments");
-    // }
-    // let arg_reader = new_tt_reader(&cx.parse_sess().span_diagnostic,
-    //                                None,
-    //                                arg.clone());
     let mut p = parse::new_parser_from_tts(cx.parse_sess(),
                                            cx.cfg(),
                                            tts.iter()
@@ -50,20 +44,12 @@ fn add_new_extension(cx: &mut ExtCtxt, sp: Span, tts: &[TokenTree])
     let mtch = p.parse_matchers();
     let prog = Program::new(mtch);
     println!("{}", prog.insts);
-    // let tail = p.parse_seq_to_end(&token::EOF, parse::common::seq_sep_none(), |p| p.bump_and_get());
-    // println!("{}", tail);
-    // p.parse_all_token_trees().as_slice()
-    println!("{}", run(&prog, &mut p, 0, prog.insts.len()));
-    MacExpr::new(quote_expr!(cx, 1i))
+    if run(&prog, &mut p, 0, prog.insts.len()) {
+        MacExpr::new(quote_expr!(cx, true))
+    } else {
+        MacExpr::new(quote_expr!(cx, false))
+    }
 }
-
-// fn expand_into_foo(cx: &mut ExtCtxt, sp: Span, attr: @MetaItem, it: @Item)
-//                    -> @Item {
-//     @Item {
-//         attrs: it.attrs.clone(),
-//         ..(*quote_item!(cx, enum Foo { Bar, Baz }).unwrap()).clone()
-//     }
-// }
 
 type InstIdx = uint;
 
