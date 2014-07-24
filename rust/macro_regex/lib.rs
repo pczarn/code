@@ -422,7 +422,7 @@ impl<'r, 't> Nfa<'r, 't> {
         matched
     }
 
-    fn step(&mut self, nlist: &mut Threads,
+    fn step(&mut self, nlist: &mut Threads<'t>,
             pc: uint, parser: &mut Option<Parser<'t>>)
            -> bool {
         // println!("{}", self.prog.insts.get(pc));
@@ -566,26 +566,26 @@ impl<'r, 't> Nfa<'r, 't> {
         }
     }
 
-    fn add_with_parser(&self, nlist: &mut Threads, pc: uint, sess: &ParseSess, cfg: CrateConfig, tt: &[TokenTree]) {
+    fn add_with_parser<'a>(&self, nlist: &mut Threads<'a>, pc: uint, sess: &'a ParseSess, cfg: CrateConfig, tt: &[TokenTree]) {
         if nlist.contains(pc) {
             return
         }
         match *self.prog.insts.get(pc) {
             Save(slot) => {
-                nlist.add(pc, true);
+                nlist.add_with_parser(pc, sess, cfg.clone(), tt);
                 self.add_with_parser(nlist, pc + 1, sess, cfg, tt);
             }
             Jump(to) => {
-                nlist.add(pc, true);
+                nlist.add_with_parser(pc, sess, cfg.clone(), tt);
                 self.add_with_parser(nlist, to, sess, cfg, tt)
             }
             Split(x, y) => {
-                nlist.add(pc, true);
+                nlist.add_with_parser(pc, sess, cfg.clone(), tt);
                 self.add_with_parser(nlist, x, sess, cfg.clone(), tt);
                 self.add_with_parser(nlist, y, sess, cfg, tt);
             }
             _ => {
-                nlist.add(pc, false);
+                nlist.add_with_parser(pc, sess, cfg, tt);
             }
         }
     }
@@ -778,6 +778,19 @@ impl<'t> Threads<'t> {
         //         }
         //     }
         // }
+        *self.sparse.get_mut(pc) = self.size;
+        self.size += 1;
+    }
+
+    fn add_with_parser(&mut self, pc: uint, sess: &'t ParseSess, cfg: CrateConfig, tts: &[TokenTree]) {
+        let t = self.queue.get_mut(self.size);
+        t.pc = pc;
+        let p = parse::new_parser_from_tts(sess,
+                                           cfg,
+                                           tts.iter()
+                                              .map(|x| (*x).clone())
+                                              .collect());
+        t.parser = Some(p);
         *self.sparse.get_mut(pc) = self.size;
         self.size += 1;
     }
