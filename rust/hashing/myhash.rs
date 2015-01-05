@@ -615,22 +615,21 @@ fn merge_slice(val: &[u8]) -> MySlice {
             loop {
                 // state.end = tmp1;
                 // val_ptr = tmp2;
-                let tmp3 = tmp1.offset(1); // state advance to the end
-                let tmp4 = tmp2.offset(1); // val ptr to the next item
+                let tmp1 = tmp1.offset(1); // state advance to the end
+                let tmp2 = tmp2.offset(1); // val ptr to the next item
                 // if len == 0 {
                 //     state.len += flen;
                 //     state.end = tmp1;
                 //     break;
-                if tmp3 == tmp4 {
-                    len -= 1;
-                    flen += 1;
-                    tmp1 = tmp3;
-                    tmp2 = tmp4;
-                } else {
-                    len -= 1;
-                    state.len += flen + 1; // len to the end
-                    state.end = tmp3;
-                    val_ptr = tmp4;
+                len -= 1;
+                flen += 1;
+                // tmp1 = tmp3;
+                // tmp2 = tmp4;
+
+                if tmp1 != tmp2 {
+                    state.len += flen; // len to the end
+                    state.end = tmp1;
+                    val_ptr = tmp2;
 
                     state = MySlice {
                         start: val_ptr,
@@ -642,8 +641,8 @@ fn merge_slice(val: &[u8]) -> MySlice {
 
                 if len == 0 {
                     state.len += flen;
-                    state.end = tmp3;
-                    break;
+                    state.end = tmp1;
+                    return state;
                 }
             }
 
