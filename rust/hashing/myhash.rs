@@ -567,7 +567,7 @@ use std::num::Int;
 struct MySlice {
     start: *const u8,
     len: uint,
-    end: *const u8,
+    // end: *const u8,
 }
 
 #[inline(never)]
@@ -590,70 +590,43 @@ fn merge_slice(val: &[u8]) -> MySlice {
         MySlice {
             start: val_ptr,
             len: 0,
-            end: val_ptr // to the end of the 0 item
+            // end: val_ptr // to the end of the 0 item
         }
     };
     
     // val_ptr = val_ptr.offset(1);
 
     unsafe {
-        // let val_end = val_ptr.offset(val.len() as int);//val_ptr + val.len();//val_ptr.offset(val.len() as int);
-        // let mut i = 0;
-        // let mut val_ptr = val_ptr.offset(1);
         while len != 0 {
-            // state = MySlice {
-            //     start: val_ptr,
-            //     len: 1,
-            //     end: val_ptr.offset(1)
-            // };
-
-            // len -= 1;
-
-            let mut flen = 0;
-            let mut tmp1 = state.end;
+            // let mut flen = 0;
+            let mut tmp1 = val_ptr;
             let mut tmp2 = val_ptr;
             loop {
-                // state.end = tmp1;
-                // val_ptr = tmp2;
-                let tmp1 = tmp1.offset(1); // state advance to the end
-                let tmp2 = tmp2.offset(1); // val ptr to the next item
-                // if len == 0 {
-                //     state.len += flen;
-                //     state.end = tmp1;
-                //     break;
+                tmp1 = tmp1.offset(1); // state advance to the end
+                tmp2 = tmp2.offset(1); // val ptr to the next item
+
                 len -= 1;
-                flen += 1;
-                // tmp1 = tmp3;
-                // tmp2 = tmp4;
+                state.len += 1;
 
                 if tmp1 != tmp2 {
-                    state.len += flen; // len to the end
-                    state.end = tmp1;
+                    // state.len += flen; // len to the end
+                    // state.end = tmp1;
                     val_ptr = tmp2;
 
                     state = MySlice {
                         start: val_ptr,
                         len: 0,
-                        end: val_ptr,
+                        // end: val_ptr,
                     };
                     break;
                 }
 
                 if len == 0 {
-                    state.len += flen;
-                    state.end = tmp1;
+                    // state.len += flen;
+                    // state.end = tmp1;
                     return state;
                 }
             }
-
-            // if tmp1 == tmp2 {
-            //     state.end = tmp1;
-            //     val_ptr = tmp2;
-            // }
-
-            // state.end = state.end.offset(flen as int);
-            // val_ptr = val_ptr.offset(flen as int);
-            // state.len += flen;
         }
     }
 
@@ -664,6 +637,7 @@ fn main() {
     let mut val_slice: &[u8] = &[12, 23, 34, 45, 12];
 
     black_box(merge_slice(val_slice));
+    // println!("{}", merge_slice(val_slice));
 
     // println!("{}", state);
 

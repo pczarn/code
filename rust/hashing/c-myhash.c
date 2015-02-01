@@ -9,6 +9,14 @@ print(char *state, size_t state_len) {
     printf("\n");
 }
 
+struct MySlice
+{
+    char *ptr;
+    size_t len;
+};
+
+void __attribute__ ((noinline))
+
 int main(int argc, char const *argv[])
 {
     char val_slice[] = {12, 23, 34, 45, 12, 23, 34, 45};
@@ -19,7 +27,7 @@ int main(int argc, char const *argv[])
     char *val_ptr = &val_slice[0];
 
     char *state = val_ptr;
-    size_t state_len = 1;
+    size_t state_len = 0;
 
     for(int i = 0; i < val_slice_len; i++) {
         if(&state[state_len] == val_ptr) {

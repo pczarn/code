@@ -1,44 +1,37 @@
 require 'pp'
 
-s=File.read('layout_info.txt')
-cur = nil
-libs = s.split(/(?=oxidize)/).map do |crate|
+s = File.read(ARGV.first || 'layout.txt')
+
+crates = {}
+s.split(/^(?=rustc)/).drop(1).each do |crate|
    lib = crate[/\/(\w+)$/, 1]
-   structs = crate.scan(/has size (\d+): \[(.*)\]/).map do |sz, fsz|
-      [sz.to_i, fsz.split(', ').map(&:to_i)]
+   structs = crate.scan(/(\d+) size (\d+)-(\d+): \[(.*)\]/)
+         .map do |id, sz, pad, fsz|
+      # struct DefId { krate: 2, node: 133725 } size 96-3: [8, 4, 1, 16, 16, 16, 16, 16]
+      [id, sz.to_i, pad.to_i, fsz.split(', ').map(&:to_i)]
    end
-   [lib, structs]
+   crates[lib] = structs
 end
 
-pp libs
-exit
+# sz_csv = {}
+# al_csv = {}
+pad_stats = {}
+# sz_csv.default = al_csv.default =
+pad_stats.default = 0
 
-dane = libs.map do |((lib, _, _)), stats|
-   [
-      lib,
-      stats && stats.map {|_, sz, fsz| [sz.to_i, *(fsz ? fsz.split.map(&:to_i) : [])] }
-   ]
+p crates.size, crates.map{|lib,_|lib}
+
+crates.values.flatten(1).uniq.map do |*head, fsizes|
+   [*head, fsizes.inject(&:+) || 0]
+end.compact
+   .each do |_, sz, pad, fsz|
+   pad_stats[pad] += 1
 end
 
-sz_csv = {}
-al_csv = {}
-diff_csv = {}
-sz_csv.default = al_csv.default = diff_csv.default = 0
+puts pad_stats.sort_by(&:first).flat_map{|a|a ? a.join(' | ') : []}.join("\n")
 
-p dane.map{|lib,_|lib}
-
-dane.map {|lib, c|
-   c.map {|st| [st.first, st.drop(1).inject(&:+) || 0] } if c
-}.flatten(1).each {|sz, al|
-   sz_csv[sz] += 1 if sz && sz > 0
-   al_csv[al] += 1 if al && al > 0
-   diff_csv[sz - al] += 1 if sz && al
-}
-
-puts diff_csv.flat_map{|a|a ? a.join(' | ') : []}.join("\n")
-
-File.write('layout_sz.csv', sz_csv.flat_map{|a|a ? a.join(',') : []}.join("\n"))
-File.write('layout_al.csv', al_csv.flat_map{|a|a ? a.join(',') : []}.join("\n"))
+# File.write('layout_sz.csv', sz_csv.flat_map{|a|a ? a.join(',') : []}.join("\n"))
+# File.write('layout_al.csv', al_csv.flat_map{|a|a ? a.join(',') : []}.join("\n"))
 
 __END__
 | total padding (bytes) | number of structs |
@@ -56,3 +49,46 @@ __END__
 | 13                    | 2 |
 | 14                    | 29 |
 | 20                    | 2 |
+-
+0 | 1621
+1 | 10
+2 | 5
+3 | 100
+4 | 83
+5 | 9
+6 | 38
+7 | 209
+8 | 8
+10 | 2
+11 | 53
+12 | 4
+13 | 3
+14 | 44
+15 | 4
+17 | 2
+18 | 9
+19 | 1
+21 | 7
+22 | 5
+24 | 2
+25 | 3
+26 | 1
+27 | 1
+28 | 2
+29 | 1
+31 | 1
+32 | 2
+33 | 8
+35 | 10
+40 | 1
+42 | 2
+44 | 3
+47 | 1
+53 | 1
+55 | 5
+92 | 1
+106 | 1
+110 | 1
+631 | 1
+675 | 2
+963 | 1

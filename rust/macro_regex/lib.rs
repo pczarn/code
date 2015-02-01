@@ -21,11 +21,13 @@ use syntax::parse::parser::Parser;
 use syntax::parse::token::{Token, Nonterminal, };
 use syntax::parse::token::InternedString;
 use syntax::parse::attr::ParserAttr;
+use syntax::parse::lexer::TtReader;
 
 use syntax::ast::{MatchTok, MatchSeq, MatchNonterminal};
 
 use rustc::plugin::Registry;
 
+use std::any::{Any, AnyRefExt};
 use std::mem;
 use std::gc::GC;
 
@@ -391,7 +393,7 @@ impl<'r, 't> Nfa<'r, 't> {
             next_ic = self.ic + 1;
 
             for i in range(0, clist.size) {
-                println!("clist i: {}", i);
+                // println!("clist i: {}", i);
                 let (pc, popt) = clist.pc(i); // grab pc of i-th current state
                 if self.step(nlist, pc, popt) {
                     matched = true;
@@ -455,6 +457,17 @@ impl<'r, 't> Nfa<'r, 't> {
                         &None => &mut *self.parser
                     };
                     // println!("pc: {:?}", pc);
+                    // Hic sunt dracones...
+                    // let reader = unsafe {
+                    //     // Extract the pointer to the boxed value, temporary alias with self
+                    //     let boxed_ptr: Box<TtReader> = mem::transmute(parser.reader);
+                    //     let c = boxed_ptr.clone();
+                    //     mem::forget(boxed_ptr);
+                    //     c
+                    // };
+                    // let reader = (unsafe {
+                    //     let r: &Box<Any> = mem::transmute(&parser.reader); r }).as_ref::<TtReader<'static>>().unwrap().clone();
+                    // parser.reader.clone();
                     let ttv = parser.parse_all_token_trees();
                     let mut p = parse::new_parser_from_tts(parser.sess,
                                                            parser.cfg.clone(),
@@ -463,8 +476,8 @@ impl<'r, 't> Nfa<'r, 't> {
                         (p, ttv)
                     } else {
                         mem::replace(parser, parse::new_parser_from_tts(p.sess,
-                                                           p.cfg.clone(),
-                                                           ttv));
+                                                                        p.cfg.clone(),
+                                                                        ttv));
                         return false;
                     }
                 };
@@ -473,6 +486,7 @@ impl<'r, 't> Nfa<'r, 't> {
                 let mut p = parse::new_parser_from_tts(p.sess,
                                                        p.cfg.clone(),
                                                        ttv.clone());
+                // let mut p = Parser::new(p.sess, p.cfg.clone(), );
 
                 self.add_with_parser(nlist, pc+1, p.sess, p.cfg.clone(), ttv2.as_slice());
                 let parser = match parser {
@@ -588,7 +602,7 @@ impl<'r, 't> Nfa<'r, 't> {
 
 // #[inline]
 fn parse_nt(parser: &mut Parser, name: &str) -> Option<Nonterminal> {
-    println!("{}", name);
+    // println!("{}", name);
     match name {
         "item" => match parser.parse_item(Vec::new()) {
           Some(i) => Some(token::NtItem(i)),

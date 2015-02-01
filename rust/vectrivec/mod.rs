@@ -248,6 +248,62 @@ fn fast_iter(b: &mut Bencher) {
 }
 
 #[bench]
+fn fast_iter_counter(b: &mut Bencher) {
+    let mut v = mk_trivec();
+    // let mut iterref = &mut iter;
+    // unsafe {
+        // asm!("" : "+r"(iterref));
+    // }
+
+    let size = 64*999;
+    b.iter(|| {
+        let mut n = 0;
+        let mut iter = mk_iter2(&mut v);
+        for (h, k, val) in iter {
+            // println!("{:?}", x);
+                *h += 1;
+                *k = (*k + *val) | *val;
+                // *k += 3;
+                *val += 2;
+                n += 1;
+                if n > size {
+                    return;
+                }
+        }
+        // println!("{:?}", v.get(0));
+    });
+    // println!("{:?}", v.get(0));
+    test::black_box(&v);
+    // println!("{:?}", n);
+}
+
+#[bench]
+fn fast_unwrap_iter_range(b: &mut Bencher) {
+    let mut v = mk_trivec();
+    // let mut iterref = &mut iter;
+    // unsafe {
+        // asm!("" : "+r"(iterref));
+    // }
+
+    let size = 64*999;
+    b.iter(|| {
+        let mut iter = mk_iter2(&mut v);
+        for i in range(0, 63*8-3) {
+            let (h, k, val) = iter.next().unwrap();
+            // println!("{:?}", x);
+                *h += i as u64;
+                *k = (*k + *val) | *val;
+                // *k += 3;
+                *val += 2;
+        }
+        // println!("{:?}", v.get(0));
+    });
+    // println!("{:?}", v.get(0));
+    test::black_box(&v);
+    // println!("{:?}", n);
+}
+
+#[bench]
 fn nested_iter(b: &mut Bencher) {
     let mut v = mk_trivec();
     // let mut iterref = &mut iter;
@@ -257,7 +313,8 @@ fn nested_iter(b: &mut Bencher) {
 
     let mut n = 0;
     b.iter(|| {
-        {let mut iterref = mk_iter(&mut v);
+        {
+            let mut iterref = mk_iter(&mut v);
         for mut x in iterref {
             // println!("{:?}", x);
             for (h, k, val) in x {
@@ -271,7 +328,12 @@ fn nested_iter(b: &mut Bencher) {
                 // return;
                 // iterref.next();
             }
-        }}
+            // if x.next() != None {
+            //     fail!()
+            // }
+        }
+            // assert!(iterref.next(), None);
+        }
         // println!("{:?}", v.get(0));
     });
     // println!("{:?}", v.get(0));
@@ -351,6 +413,35 @@ fn nested_unwrap_iter(b: &mut Bencher) {
     // println!("{:?}", v.get(0));
     test::black_box(&v);
     // println!("{:?}", n);
+}
+
+#[bench]
+fn nested_unwrap_iter_range(b: &mut Bencher) {
+    let mut v = mk_trivec();
+    b.iter(|| {
+        {let mut iterref = mk_iter(&mut v);
+        let mut triple = iterref.next().unwrap();
+        for i in range(0, 64*8-3) {
+            let (h, k, val) = unsafe {
+                match triple.next() {
+                    Some(t) => t,
+                    None => {
+                        match iterref.next() {
+                            Some(iter) => {
+                                triple = iter;
+                                triple.next().unwrap()
+                            }
+                            None => break
+                        }
+                    }
+                }
+            };
+                *h += i as u64;
+                *k = (*k + *val) | *val;
+                *val += 2;
+        }}
+    });
+    test::black_box(&v);
 }
 
 #[bench]
