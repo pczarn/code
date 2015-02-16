@@ -15,14 +15,14 @@ use std::num::{Int, ToPrimitive};
 use std::ops::Shr;
 use std::{option, str, slice};
 use std::mem::size_of;
-use std::iter::{FlatMap, Cloned, Chain, repeat};
+use std::iter::{FlatMap, Cloned, Chain, repeat, ExactSizeIterator, AdditiveIterator};
 
 use self::test::Bencher;
 
 /// A hashable type.
 pub trait Hash {
     type Contents: Iterator<Item=u8>;
-    fn as_byte_contents(&self) -> <Self as Hash>::Contents;
+    fn as_byte_contents(&self) -> (<Self as Hash>::Contents, usize);
 }
 
 /// A trait which represents the ability to hash an arbitrary stream of bytes.
@@ -35,7 +35,7 @@ pub trait Hasher {
     fn reset(&mut self);
 
     /// Completes a round of hashing, producing the output hash generated.
-    fn hash<T: Iterator<Item=u8>>(&mut self, iter: T) -> Self::Output;
+    fn hash<T: Iterator<Item=u8>>(&mut self, iter: T, length: usize) -> Self::Output;
 }
 
 // /// A common bound on the `Hasher` parameter to `Hash` implementations in order
@@ -54,7 +54,8 @@ pub trait Hasher {
 pub fn hash<T: Hash, H: Hasher + Default>(value: &T) -> H::Output {
     let mut h: H = Default::default();
     // value.hash(&mut h);
-    h.hash(value.as_byte_contents())
+    let (iter, len) = value.as_byte_contents();
+    h.hash(iter, len)
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -63,11 +64,11 @@ type IntIter<'a, T> = IntContents<T>;
 
 macro_rules! impl_hash {
     ($ty:ident, $uty:ident) => {
-        impl<'a> Hash for &'a $ty {
+        impl<'a> Hash for $ty {
             type Contents = IntIter<'a, $ty>;
             // type Contents = slice::IntoIter<u8>;
-            #[inline]
-            fn as_byte_contents(&self) -> IntIter<'a, $ty> {// slice::IntoIter<u8> {
+            #[inline(always)]
+            fn as_byte_contents(&self) -> (IntIter<'a, $ty>, usize) {// slice::IntoIter<u8> {
                 // let a: [u8; ::std::$ty::BYTES] = unsafe {
                 //     mem::transmute((*self as $uty).to_le() as $ty)
                 // };
@@ -76,10 +77,10 @@ macro_rules! impl_hash {
                 //     slice::from_raw_parts(*self as *const _ as *const u8, size_of::<$ty>()).iter().cloned()
                 // }
                 // a.into_iter()
-                IntContents {
-                    val: **self,
+                (IntContents {
+                    val: *self,
                     len: size_of::<$ty>(),
-                }
+                }, size_of::<$ty>())
             }
         }
     }
@@ -99,15 +100,15 @@ impl_hash! { isize, usize }
 impl Hash for bool {
     type Contents = option::IntoIter<u8>;
     #[inline]
-    fn as_byte_contents(&self) -> option::IntoIter<u8> {
-        Some(*self as u8).into_iter()
+    fn as_byte_contents(&self) -> (option::IntoIter<u8>, usize) {
+        (Some(*self as u8).into_iter(), 1)
     }
 }
 
 impl<'a> Hash for &'a char {
     type Contents = <&'a u32 as Hash>::Contents;
     #[inline]
-    fn as_byte_contents(&self) -> <&'a u32 as Hash>::Contents {
+    fn as_byte_contents(&self) -> (<&'a u32 as Hash>::Contents, usize) {
         let r: &'a u32 = unsafe { mem::transmute(self) };
         r.as_byte_contents()
     }
@@ -117,12 +118,12 @@ impl<'a> Hash for &'a str {
     // type Contents = StrContents<'a>;
     type Contents = Chain<str::Bytes<'a>, option::IntoIter<u8>>;
     #[inline]
-    fn as_byte_contents(&self) -> Chain<str::Bytes<'a>, option::IntoIter<u8>> {
+    fn as_byte_contents(&self) -> (Chain<str::Bytes<'a>, option::IntoIter<u8>>, usize) {
         // StrContents {
         //     bytes: self.bytes(),
         //     mark: true,
         // }
-        self.bytes().chain(Some(0xff).into_iter())
+        (self.bytes().chain(Some(0xff).into_iter()), self.len() + 1)
     }
 }
 
@@ -185,29 +186,79 @@ impl<'a> Hash for &'a str {
 // impl_hash_tuple! { A B C D E F G H I J K }
 // impl_hash_tuple! { A B C D E F G H I J K L }
 
+// struct ExactSize<T>(T, usize);
+
+// impl<T: Iterator> Iterator for ExactSize<T> {
+//     type Item = T::Item;
+//     #[inline(always)]
+//     fn next(&mut self) -> Option<T::Item> {
+//         self.0.next()
+//     }
+// }
+
+// impl<T: Iterator> ExactSizeIterator for ExactSize<T> {
+//     #[inline]
+//     fn len(&self) -> usize {
+//         self.1
+//     }
+// }
+
 // type SliceContents<'a, T, U> = Chain<Cloned<slice::Iter<'a, u8>>,
 // type SliceContents<'a, T, U> = Chain<UsizeContents,
-type SliceContents<'a, T, U> = Chain<option::IntoIter<u8>,
-                    FlatMap<slice::Iter<'a, T>,
-                            U,
-                            fn(arg: &'a T) -> U>>;
+type SliceContents<'a, T, U> = Chain<Cloned<slice::Iter<'a, u8>>,//IntContents<usize>,
+                                     // FlatMap<slice::Iter<'a, T>,
+                                     //         U,
+                                     //         fn(arg: &'a T) -> U>>;
+                                     AryContents<'a, T, U>>;
 
-impl<'a, T, U: Iterator<Item=u8>> Hash for &'a &'a [T] where &'a T: Hash<Contents=U> {
+impl<'a, T: 'a, U: Iterator<Item=u8>> Hash for &'a [T] where &'a T: Hash<Contents=U> {
     type Contents = SliceContents<'a, T, U>;
     #[inline]
-    fn as_byte_contents(&self) -> SliceContents<'a, T, U> {
-        // let this: &'a std::raw::Slice<T> = unsafe { mem::transmute(*self) };
+    fn as_byte_contents(&self) -> (SliceContents<'a, T, U>, usize) {
+        let this: &'a std::raw::Slice<T> = unsafe { mem::transmute(self) };
+        let len: &'a [u8; ::std::usize::BYTES] = unsafe { mem::transmute(&this.len) };
         // self.len().as_byte_co(state);
+        #[inline(always)]
         fn f<'a, U: Iterator<Item=u8>, T>(arg: &'a T) -> U where &'a T: Hash<Contents=U> {
-            (&arg).as_byte_contents()
+            arg.as_byte_contents().0
         }
         let f = f as fn(arg: &'a T) -> U;
         // (&this.len).as_byte_contents().chain(self.iter().flat_map(f))
-        // UsizeContents {
-        //     val: self.len(),
-        //     len: size_of::<usize>(),
-        // }.chain(self.iter().flat_map(f))
-        None.into_iter().chain(self.iter().flat_map(f))
+        (
+            // IntContents {
+            //     val: self.len(),
+            //     len: size_of::<usize>(),
+            // }.chain(self.iter().flat_map(f)),
+            // len.iter().cloned().chain(self.iter().flat_map(f)),
+            len.iter().cloned().chain(AryContents { iter: self.iter(), contents: None }),
+            size_of::<usize>() + self.iter().map(|i| i.as_byte_contents().1).sum()
+        )
+        // println!("in flat_map");
+        // None.into_iter().chain(self.iter().flat_map(f))
+    }
+}
+
+struct AryContents<'a, T: 'a, U> {
+    iter: slice::Iter<'a, T>,
+    contents: Option<U>,
+}
+
+impl<'a, T: 'a, U> Iterator for AryContents<'a, T, U>
+    where &'a T: Hash<Contents=U>,
+          U: Iterator<Item=u8>,
+{
+    type Item = u8;
+    #[inline(always)]
+    fn next(&mut self) -> Option<u8> {
+        loop {
+            if let Some(ref mut inner) = self.contents {
+                return inner.by_ref().next();
+            }
+            match self.iter.next() {
+                None => return None,
+                Some(other) => self.contents = Some(other.as_byte_contents().0),
+            }
+        }
     }
 }
 
@@ -218,6 +269,7 @@ struct IntContents<T> {
 
 impl<T: Int + ToPrimitive + Shr<usize>> Iterator for IntContents<T> {
     type Item = u8;
+    #[inline(always)]
     fn next(&mut self) -> Option<u8> {
         if self.len == 0 {
             None
@@ -230,19 +282,25 @@ impl<T: Int + ToPrimitive + Shr<usize>> Iterator for IntContents<T> {
     }
 }
 
+impl<T: Int + ToPrimitive + Shr<usize>> ExactSizeIterator for IntContents<T> {
+    fn len(&self) -> usize {
+        self.len
+    }
+}
+
 impl<'a, T: ?Sized, U: Iterator<Item=u8>> Hash for &'a T where T: Hash<Contents=U> {
     type Contents = U;
     #[inline]
-    fn as_byte_contents(&self) -> U {
-        self.as_byte_contents()
+    fn as_byte_contents(&self) -> (U, usize) {
+        (*self).as_byte_contents()
     }
 }
 
 impl<'a, T: ?Sized, U: Iterator<Item=u8>> Hash for &'a mut T where T: Hash<Contents=U> {
     type Contents = U;
     #[inline]
-    fn as_byte_contents(&self) -> U {
-        self.as_byte_contents()
+    fn as_byte_contents(&self) -> (U, usize) {
+        (*self).as_byte_contents()
     }
 }
 
@@ -393,6 +451,50 @@ impl SipHasher {
 //     }
 // }
 
+struct Chunks8<T> {
+    iter: T,
+}
+
+impl<T: Iterator<Item=u8>> Iterator for Chunks8<T> {
+    type Item = u64;
+    #[inline(never)]
+    fn next(&mut self) -> Option<u64> {
+        // let ary = 
+        //     [self.iter.next().unwrap_or(0),
+        //      self.iter.next().unwrap_or(0),
+        //      self.iter.next().unwrap_or(0),
+        //      self.iter.next().unwrap_or(0),
+        //      self.iter.next().unwrap_or(0),
+        //      self.iter.next().unwrap_or(0),
+        //      self.iter.next().unwrap_or(0),
+        //      self.iter.next().unwrap_or(0),];
+
+        // Some(u8to64_le!(ary, 0))
+        match self.iter.next() {
+            Some(mi) => {
+                // let mut mi = mi as u64;
+                let mut msg = [mi, 0, 0, 0, 0, 0, 0, 0];
+                for (i, x) in (1u..8).zip(self.iter.by_ref()) {
+                    // mi <<= 8;
+                    // mi |= self.iter.next().unwrap_or(0) as u64;
+                    // mi |= x as u64;
+                    msg[i] = x;
+                }
+                // Some(mi)
+                Some(u8to64_le!(msg, 0))
+            }
+            None => None
+        }
+
+        // let mut mi = 0;
+        // for _ in 0..8 {
+        //     mi |= self.iter.next().unwrap_or(0) as u64;
+        //     mi <<= 8;
+        // }
+        // Some(mi)
+    }
+}
+
 impl Hasher for SipHasher {
     type Output = u64;
 
@@ -405,12 +507,21 @@ impl Hasher for SipHasher {
         self.ntail = 0;
     }
 
-    fn hash<T: Iterator<Item=u8>>(&mut self, mut iter: T) -> u64 {
-        let mut length = 0u8;
+    fn hash<T: Iterator<Item=u8>>(&mut self, mut iter: T, mut length: usize) -> u64 {
+        // let mut length = 0;
+        // println!("{}", length);
+        // let mut i = iter.fuse();
+        let mut v0 = self.v0;
+        let mut v1 = self.v1;
+        let mut v2 = self.v2;
+        let mut v3 = self.v3;
 
-        let mut iter = iter.by_ref();
+        let mut iter = Chunks8 { iter: iter };
+        let mut mi = 0;
+        let mut i = 0;
+        // let mut ary = [None, None, None, None, None, None, None, None, ];
 
-        loop {
+        for chunk in iter {
             // let (len, mut mi) = iter.by_ref()
             //                         .take(8)
             //                         .enumerate()
@@ -455,46 +566,101 @@ impl Hasher for SipHasher {
             // };
 
             // let mut mi = u8to64_le!(mi, 0, len);
-            let mut len = 0;
-            let mut mi = 0;
-            for byte in iter.take(8) {
-                mi |= (byte as u64) << len*8;
-                len += 1;
-            }
+            // len = 0;
+            // for byte in iter.take(8) {
+            //     mi |= (byte as u64) << len*8;
+            //     len += 1;
+            // }
 
-            length += len as u8;
+            // let first = match iter.next() {
+            //     Some(x) => x,
+            //     None => break
+            // };
+
+            // ary = [
+            //     Some(first),
+            //     iter.next(),
+            //     iter.next(),
+            //     iter.next(),
+            //     iter.next(),
+            //     iter.next(),
+            //     iter.next(),
+            //     iter.next(),
+            // ];
+            
+            // let ary = 
+            //     [iter.next().unwrap_or(0),
+            //      iter.next().unwrap_or(0),
+            //      iter.next().unwrap_or(0),
+            //      iter.next().unwrap_or(0),
+            //      iter.next().unwrap_or(0),
+            //      iter.next().unwrap_or(0),
+            //      iter.next().unwrap_or(0),
+            //      iter.next().unwrap_or(0),];
+            // {
+            //     // let mut iter = iter.take(8).map(|x| {len += 1; x});
+            //     // let a = [iter.next(),iter.next(),iter.next(),iter.next(),iter.next(),iter.next(),iter.next(),iter.next(),];
+
+            //     // let mut i = a.iter();
+            //     // while let Some(&Some(_)) = i.next() {
+            //     //     len += 1;
+            //     // }
+
+            //     [first,
+            //      ary[1].unwrap_or(0),
+            //      ary[2].unwrap_or(0),
+            //      ary[3].unwrap_or(0),
+            //      ary[4].unwrap_or(0),
+            //      ary[5].unwrap_or(0),
+            //      ary[6].unwrap_or(0),
+            //      ary[7].unwrap_or(0),]
+            // };
+            // for i in ary.iter() {
+            //     if i 
+            // }
+            // mi = u8to64_le!(ary, 0);
+
+            // length += len as u8;
 
             // if len != 8 {   
             //     mi |= (length as u64) << 56;
             // }
 
-            if len == 8 {
-                self.v3 ^= mi;
-                compress!(self.v0, self.v1, self.v2, self.v3);
-                compress!(self.v0, self.v1, self.v2, self.v3);
-                self.v0 ^= mi;
-            } else {
+            // i += 8;
 
-            // if len != 8 {
-                mi |= (length as u64) << 56;
-                self.v3 ^= mi;
-                compress!(self.v0, self.v1, self.v2, self.v3);
-                compress!(self.v0, self.v1, self.v2, self.v3);
-                self.v0 ^= mi;
-                let mut v0 = self.v0;
-                let mut v1 = self.v1;
-                let mut v2 = self.v2;
-                let mut v3 = self.v3;
+            mi = chunk;
 
-                v2 ^= 0xff;
-                compress!(v0, v1, v2, v3);
-                compress!(v0, v1, v2, v3);
-                compress!(v0, v1, v2, v3);
-                compress!(v0, v1, v2, v3);
-
-                return v0 ^ v1 ^ v2 ^ v3;
+            i += 8;
+            if i >= length {
+                break;
             }
+
+            v3 ^= mi;
+            compress!(v0, v1, v2, v3);
+            compress!(v0, v1, v2, v3);
+            v0 ^= mi;
         }
+
+        // for i in ary.iter() {
+        //     match i {
+        //         &Some(_) => length += 1,
+        //         _ => break,
+        //     }
+        // }
+
+        mi |= ((length & 0xff) as u64) << 56;
+        v3 ^= mi;
+        compress!(v0, v1, v2, v3);
+        compress!(v0, v1, v2, v3);
+        v0 ^= mi;
+
+        v2 ^= 0xff;
+        compress!(v0, v1, v2, v3);
+        compress!(v0, v1, v2, v3);
+        compress!(v0, v1, v2, v3);
+        compress!(v0, v1, v2, v3);
+
+        return v0 ^ v1 ^ v2 ^ v3;
     }
 }
 
@@ -1208,9 +1374,9 @@ fn main() {
 
 #[bench]
 fn bench_slice(bench: &mut Bencher) {
-    let mut val: &[u8] = &[12, 23, 34, 45, 12, 12, 23, 34, 45, 12, ];
+    let val: &[u8] = &[12, 23, 34, 45, 12, 12, 23, 34, 45, 12, ];
     // let mut val: &[&[u8]] = &[&[12, 23, 34, 45, 12, 12, 23, 34, 45, 12, ], &[12, 23, 34, 45, 12, 12, 23, 34, 45, 12, ], &[12, 23, 34, 45, 12, 12, 23, 34, 45, 12, ]];
-    // let val = 0u64;
+    // let mut val = 0u64;
     // let val = "abecadło";
     let mut r = &val;
     unsafe { asm!("" : "+r"(r) ::: "volatile"); }
@@ -1224,9 +1390,9 @@ fn bench_slice(bench: &mut Bencher) {
 fn bench_std(bench: &mut Bencher) {
     let mut val: &[u8] = &[12, 23, 34, 45, 12, 12, 23, 34, 45, 12, ];
     // let mut val: &[&[u8]] = &[&[12, 23, 34, 45, 12, 12, 23, 34, 45, 12, ], &[12, 23, 34, 45, 12, 12, 23, 34, 45, 12, ], &[12, 23, 34, 45, 12, 12, 23, 34, 45, 12, ]];
-    // let val = 0u64;
+    // let mut val = 0u64;
     // let val = "abecadło";
-    let mut r = &val;
+    let mut r = &mut val;
     unsafe { asm!("" : "+r"(r) ::: "volatile"); }
 
     bench.iter(||
@@ -1238,14 +1404,15 @@ fn bench_std(bench: &mut Bencher) {
 #[cfg(not(test))]
 fn main() {
     // let mut val_slice: &[u8] = &[12, 23, 34, 45, 12];
-    let mut val: &[&[u8]] = &[&[12, 23, 34, 45, 12, 12, 23, 34, 45, 12, ]];
-    let mut val: &_ = &val;
-    let mut r = &mut val;
-    // unsafe { asm!("" : "+r"(r) ::: "volatile"); }
+    // let mut val: &[u8] = &[12, 23, 34, 45, 12, 12, 23, 34, 45, 12, ];
+    let mut val = 0u64;
+    let mut r = &val;
+    unsafe { asm!("" : "+r"(r) ::: "volatile"); }
 
-    // black_box(&hash::<_, SipHasher>(&r));
-    println!("{} {}", hash::<_, SipHasher>(&r), ::std::hash::hash::<_, ::std::hash::SipHasher>(&r));
-    // black_box(&::std::hash::hash::<&str, ::std::hash::SipHasher>(&r));
+    black_box(&hash::<_, SipHasher>(&val));
+    // println!("in main");
+    // println!("{} {}", hash::<_, SipHasher>(&val), ::std::hash::hash::<_, ::std::hash::SipHasher>(&val));
+    // black_box(&::std::hash::hash::<_, ::std::hash::SipHasher>(&r));
     // black_box(&merge_slice(*r));
 
     // println!("{}", merge_slice(val_slice));
