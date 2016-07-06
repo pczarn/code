@@ -96,39 +96,21 @@ class robinHood {
 class mapView {
   constructor(map) {
     this.map = map;
+    this.update();
   }
 
   update() {
-
-  }
-
-  draw(ctx) {
     var side = this.side;
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.lineTo(this.map.capacity * side, 0);
-    ctx.moveTo(0, side);
-    ctx.lineTo(this.map.capacity * side, side);
-    // draw boxes
     var ary = [];
-    var iter = this.map.iterator();
-    // Start first square
-    ctx.moveTo(0, 0);
-    ctx.lineTo(0, side);
-    // Squares closed
     for(var i=0; i<this.map.capacity; i++) {
-      var next = iter.next();
-      ctx.moveTo((i + 1) * side, 0);
-      ctx.lineTo((i + 1) * side, side);
-      if(!next.done && next.value !== undefined) {
-        ctx.fillText(next.value.text, i * side + side / 2, side / 2);
-        if(next.value.initial !== undefined) {
-          var edge = {from: i, to: next.value.initial};
-          if(edge.to > edge.from) {
-            edge.from += this.map.capacity;
-          }
-          ary.push(edge);
+      var next = this.map.table[i];
+      if(next !== undefined) {
+        // .initial can be undefined??
+        var edge = {from: i, to: next.initial};
+        if(edge.to > edge.from) {
+          edge.from += this.map.capacity;
         }
+        ary.push(edge);
       }
     }
     var arrowsIn = new Set();
@@ -141,6 +123,7 @@ class mapView {
       }
       arrowsIn.add(dst_x);
     }
+    // Compute levels
     ary.sort((a, b) => a.from - a.to - (b.from - b.to));
     ary.sort((a, b) => a.from - b.from);
     var levels = [];
@@ -159,31 +142,68 @@ class mapView {
       ary = new_ary;
       levels.push(current_level);
     }
-    for(let levelId=0; levelId<levels.length; levelId++) {
-      for(let edge of levels[levelId]) {
-        let y = side + levelId * 10;
-        if(edge.to != edge.from) {
-          y += 10;
-        }
-        let src_x = edge.from * side + side / 2;
-        ctx.moveTo(src_x, side * 4 / 5);
-        ctx.lineTo(src_x, y + side / 5);
-        let dst_x;
-        if(edge.to == edge.from) {
-          dst_x = edge.to * side + side / 3;
-        } else {
-          dst_x = edge.to * side + side * 2 / 3;
-        }
-        ctx.lineTo(dst_x, y + side / 5);
-        ctx.lineTo(dst_x, side * 4 / 5);
+    // Save work
+    this.arrowsIn = arrowsIn;
+    this.levels = levels;
+  }
+
+  draw(ctx) {
+    var side = this.side;
+    this.drawBoxes(ctx);
+    for(let level=0; level<this.levels.length; level++) {
+      for(let edge of this.levels[level]) {
+        this.drawEdge(ctx, edge, level);
       }
     }
     ctx.stroke();
 
-    for(let dst_x of arrowsIn) {
+    for(let dst_x of this.arrowsIn) {
         ctx.beginPath();
         drawArrow(ctx, {x: dst_x, y: side * 4 / 5}, Math.PI*3/2, 7);
     }
+  }
+
+  drawBoxes(ctx) {
+    var side = this.side;
+    // Draw horizontal boundaries
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(this.map.capacity * side, 0);
+    ctx.moveTo(0, side);
+    ctx.lineTo(this.map.capacity * side, side);
+    // Draw boxes
+    var iter = this.map.iterator();
+    // Start first square
+    ctx.moveTo(0, 0);
+    ctx.lineTo(0, side);
+    // Draw closed squares
+    for(var i=0; i<this.map.capacity; i++) {
+      var next = iter.next();
+      ctx.moveTo((i + 1) * side, 0);
+      ctx.lineTo((i + 1) * side, side);
+      if(!next.done && next.value !== undefined) {
+        ctx.fillText(next.value.text, i * side + side / 2, side / 2);
+      }
+    }
+  }
+
+  drawEdge(ctx, edge, level) {
+    var side = this.side;
+    let y = side + level * 10;
+    if(edge.to != edge.from) {
+      y += 10;
+    }
+    let src_x = edge.from * side + side / 2;
+    ctx.moveTo(src_x, side * 4 / 5);
+    ctx.lineTo(src_x, y + side / 5);
+    let dst_x;
+    if(edge.to == edge.from) {
+      dst_x = edge.to * side + side / 3;
+    } else {
+      dst_x = edge.to * side + side * 2 / 3;
+    }
+    ctx.lineTo(dst_x, y + side / 5);
+    ctx.lineTo(dst_x, side * 4 / 5);
   }
 }
 
