@@ -330,6 +330,15 @@ function onLoad() {
         view.update();
       }
     });
+
+    canvas.addEventListener('contextmenu', function(event) {
+      var bucket = bucketFromMousePos(event);
+      if(bucket) {
+        event.preventDefault();
+        return false;
+      }
+    });
+
     window.requestAnimationFrame(draw);
   }
 
