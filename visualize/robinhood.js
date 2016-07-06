@@ -141,7 +141,7 @@ class mapView {
       // var next = iter.next();
       // var nextFrom = next.value;
       // var nextTo = next.key;
-      var skip_until = Math.max([...nextFrom.values()]);
+      var skip_until = Math.max(...nextFrom.values());
       // Find a suitable level
       var freeLevel = levels.findIndex(level => level <= nextTo);
       if(freeLevel == -1) {
@@ -214,10 +214,14 @@ class mapView {
   drawEdgeSet(ctx, edgeSet) {
     var side = this.side;
     let y = side + edgeSet.level * 10;
-    // if(edge.to != edge.from) {
-    //   y += 10;
-    // }
-    let dst_x = edgeSet.to * side + side / 3;
+    let dst_x;
+    if(edgeSet.from.has(edgeSet.to)) {
+      // Displacement of 0 present.
+      dst_x = edgeSet.to * side + side / 3;
+    } else {
+      // This must be farther to the right.
+      dst_x = edgeSet.to * side + side * 2 / 3;
+    }
     for(let fromEntry of edgeSet.from) {
       let src_x;
       if(edgeSet.to == fromEntry) {
