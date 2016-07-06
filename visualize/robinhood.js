@@ -98,7 +98,7 @@ class mapView {
   constructor(map) {
     this.map = map;
     this.update();
-    this.arrowsIn = new Set();
+    this.highlight = null;
   }
 
   update() {
@@ -151,16 +151,22 @@ class mapView {
     var side = this.side;
     this.drawBoxes(ctx);
     for(let edge of this.edges) {
-      this.drawEdgeSet(ctx, edge);
+      if(edge.to != this.highlight) {
+        this.drawEdgeSet(ctx, edge);
+      }
     }
     ctx.stroke();
-
-    ctx.beginPath();
-    for(let dst_x of this.arrowsIn) {
-        drawArrow(ctx, {x: dst_x, y: side * 4 / 5}, Math.PI*3/2, 7);
+    var highlight = this.edges.find(edge => edge.to == this.highlight);
+    if(highlight !== undefined) {
+      // highlighted
+      ctx.save();
+      ctx.strokeStyle = "red";
+      ctx.fillStyle = "red";
+      ctx.beginPath();
+        this.drawEdgeSet(ctx, highlight);
+      ctx.stroke();
+      ctx.restore();
     }
-    ctx.fill();
-    this.arrowsIn.clear();
   }
 
   drawBoxes(ctx) {
@@ -185,32 +191,37 @@ class mapView {
         ctx.fillText(next.value.text, i * side + side / 2, side / 2);
       }
     }
+    ctx.stroke();
   }
 
   drawEdgeSet(ctx, edgeSet) {
-    var side = this.side;
-    let y = side + edgeSet.level * 10;
-    let dst_x;
-    if(edgeSet.from.has(edgeSet.to)) {
-      // Displacement of 0 present.
-      dst_x = edgeSet.to * side + side / 3;
-    } else {
-      // This must be farther to the right.
-      dst_x = edgeSet.to * side + side * 2 / 3;
-    }
-    for(let fromEntry of edgeSet.from) {
-      let src_x;
-      if(edgeSet.to == fromEntry) {
-        src_x = fromEntry * side + side * 2 / 3;
+    ctx.beginPath();
+      var side = this.side;
+      let y = side + edgeSet.level * 10;
+      let dst_x;
+      if(edgeSet.from.has(edgeSet.to)) {
+        // Displacement of 0 present.
+        dst_x = edgeSet.to * side + side / 3;
       } else {
-        src_x = fromEntry * side + side / 2;
+        // This must be farther to the right.
+        dst_x = edgeSet.to * side + side * 2 / 3;
       }
-      ctx.moveTo(src_x, side * 4 / 5);
-      ctx.lineTo(src_x, y + side / 5);
-      ctx.lineTo(dst_x, y + side / 5);
-      ctx.lineTo(dst_x, side * 4 / 5);
-    }
-    this.arrowsIn.add(dst_x);
+      for(let fromEntry of edgeSet.from) {
+        let src_x;
+        if(edgeSet.to == fromEntry) {
+          src_x = fromEntry * side + side * 2 / 3;
+        } else {
+          src_x = fromEntry * side + side / 2;
+        }
+        ctx.moveTo(src_x, side * 4 / 5);
+        ctx.lineTo(src_x, y + side / 5);
+        ctx.lineTo(dst_x, y + side / 5);
+        ctx.lineTo(dst_x, side * 4 / 5);
+      }
+    ctx.stroke();
+    ctx.beginPath();
+      drawArrow(ctx, {x: dst_x, y: side * 4 / 5}, Math.PI*3/2, 7);
+    ctx.fill();
   }
 }
 
@@ -270,39 +281,51 @@ function onLoad() {
   if(canvas.getContext) {
     var lastX = 0, dragging = false;
 
+    function bucketFromMousePos(event) {
+      var pos = getMousePos(canvas, event);
+      if(pos.y >= 0 && pos.y <= view.side && pos.x >= 0 && pos.x <= map.capacity * view.side) {
+        return Math.floor(pos.x / view.side);
+      } else {
+        return null;
+      }
+    }
+
     canvas.addEventListener('mousemove', function(e) {
       var event = e || event;
+      view.highlight = null;
       if(dragging) {
         var delta = event.offsetX - lastX;
         transMoved += delta;
         lastX = event.offsetX;
+      } else {
+        var bucket = bucketFromMousePos(event);
+        if(bucket !== null) {
+          view.highlight = bucket;
+        }
       }
     });
 
     canvas.addEventListener('mousedown', function(e) {
       var event = e || event;
       lastX = event.offsetX;
-      var pos = getMousePos(canvas, event);
-      if(pos.y >= 0 && pos.y <= view.side && pos.x >= 0 && pos.x <= map.capacity * view.side) {
-        // within box
-      } else {
+      var bucket = bucketFromMousePos(event);
+      if(bucket === null) {
+        // dragging outside the box
         dragging = true;
       }
     });
 
     canvas.addEventListener('mouseup', function(event) {
       dragging = false;
-      var pos = getMousePos(canvas, event);
-      if(pos.y >= 0 && pos.y <= view.side && pos.x >= 0 && pos.x <= map.capacity * view.side) {
+      var bucket = bucketFromMousePos(event);
+      if(bucket !== null) {
         var load_factor = document.getElementById('load-factor');
         map.load_factor = parseFloat(load_factor.value);
-
-        var bucketId = Math.floor(pos.x / view.side);
         if(event.button == 0) {
           var text = "el" + Math.floor(Math.random() * 100);
-          map.insert(bucketId, text);
+          map.insert(bucket, text);
         } else {
-          map.remove(bucketId);
+          map.remove(bucket);
         }
         view.update();
       }
