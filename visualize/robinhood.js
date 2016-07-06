@@ -114,47 +114,69 @@ class mapView {
         ary.push(edge);
       }
     }
-    var arrowsIn = new Set();
-    for(let edge of ary) {
-      let dst_x;
-      if(edge.to == edge.from) {
-        dst_x = edge.to * side + side / 3;
-      } else {
-        dst_x = edge.to * side + side * 2 / 3;
-      }
-      arrowsIn.add(dst_x);
-    }
+    // var arrowsIn = new Set();
+    // for(let edge of ary) {
+    //   var dst_x = edge.to * side + side / 3;
+    //   arrowsIn.add(dst_x);
+    // }
+
     // Compute levels
-    ary.sort((a, b) => a.from - a.to - (b.from - b.to));
-    ary.sort((a, b) => a.from - b.from);
-    var levels = [];
-    while(ary.length != 0) {
-      var new_ary = [];
-      var current_level = [];
-      for(var idx=0; idx<ary.length; idx++) {
-        var next = ary[idx];
-        var skip_until = next.from;
-        while(idx + 1 < ary.length && ary[idx + 1].to < skip_until) {
-          new_ary.push(ary[idx + 1]);
-          idx += 1;
-        }
-        current_level.push(next);
+    // ary.sort((a, b) => a.from - a.to - (b.from - b.to));
+    // ary.sort((a, b) => a.from - b.from);
+    var edges = new Map();
+    for(var i=0; i<ary.length; i++) {
+      var to = ary[i].to;
+      if(!edges.has(to)) {
+        edges.set(to, new Set());
       }
-      ary = new_ary;
-      levels.push(current_level);
+      edges.get(to).add(ary[i].from);
+    }
+    // for(var to in edges) {
+    //   edges[to].maxFrom = edges[to].
+    // }
+    var processed = [];
+    var levels = [];
+    for(var [nextTo, nextFrom] of edges) {
+      // var iter = edges[Symbol.iterator]();
+      // var next = iter.next();
+      // var nextFrom = next.value;
+      // var nextTo = next.key;
+      var skip_until = Math.max([...nextFrom.values()]);
+      // Find a suitable level
+      var freeLevel = levels.findIndex(level => level <= nextTo);
+      if(freeLevel == -1) {
+        freeLevel = levels.length;
+        levels.push(skip_until);
+      } else {
+        levels[freeLevel] = skip_until;
+      }
+      // Move the edge to processed
+      processed.push({
+        to: nextTo,
+        from: nextFrom,
+        level: freeLevel
+      });
+      // for(var [key, val] of iter) {
+      //   var next = edges[to];
+      //   var skip_until = Math.max([...next.values()]);
+      //   while(idx + 1 < ary.length && ary[idx + 1].to < skip_until) {
+      //     new_ary.push(ary[idx + 1]);
+      //     idx += 1;
+      //   }
+      //   current_level.push(next);
+      // }
     }
     // Save work
-    this.arrowsIn = arrowsIn;
-    this.levels = levels;
+    // this.arrowsIn = arrowsIn;
+    this.arrowsIn = new Set();
+    this.edges = processed;
   }
 
   draw(ctx) {
     var side = this.side;
     this.drawBoxes(ctx);
-    for(let level=0; level<this.levels.length; level++) {
-      for(let edge of this.levels[level]) {
-        this.drawEdge(ctx, edge, level);
-      }
+    for(let edge of this.edges) {
+      this.drawEdgeSet(ctx, edge);
     }
     ctx.stroke();
 
@@ -162,6 +184,7 @@ class mapView {
         ctx.beginPath();
         drawArrow(ctx, {x: dst_x, y: side * 4 / 5}, Math.PI*3/2, 7);
     }
+    this.arrowsIn.clear();
   }
 
   drawBoxes(ctx) {
@@ -188,23 +211,26 @@ class mapView {
     }
   }
 
-  drawEdge(ctx, edge, level) {
+  drawEdgeSet(ctx, edgeSet) {
     var side = this.side;
-    let y = side + level * 10;
-    if(edge.to != edge.from) {
-      y += 10;
+    let y = side + edgeSet.level * 10;
+    // if(edge.to != edge.from) {
+    //   y += 10;
+    // }
+    let dst_x = edgeSet.to * side + side / 3;
+    for(let fromEntry of edgeSet.from) {
+      let src_x;
+      if(edgeSet.to == fromEntry) {
+        src_x = fromEntry * side + side * 2 / 3;
+      } else {
+        src_x = fromEntry * side + side / 2;
+      }
+      ctx.moveTo(src_x, side * 4 / 5);
+      ctx.lineTo(src_x, y + side / 5);
+      ctx.lineTo(dst_x, y + side / 5);
+      ctx.lineTo(dst_x, side * 4 / 5);
     }
-    let src_x = edge.from * side + side / 2;
-    ctx.moveTo(src_x, side * 4 / 5);
-    ctx.lineTo(src_x, y + side / 5);
-    let dst_x;
-    if(edge.to == edge.from) {
-      dst_x = edge.to * side + side / 3;
-    } else {
-      dst_x = edge.to * side + side * 2 / 3;
-    }
-    ctx.lineTo(dst_x, y + side / 5);
-    ctx.lineTo(dst_x, side * 4 / 5);
+    this.arrowsIn.add(dst_x);
   }
 }
 
