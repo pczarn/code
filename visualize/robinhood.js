@@ -210,7 +210,7 @@ class mapView {
 
 function onLoad() {
   var canvas = document.getElementById('visualization');
-  var transX = 0, transY = 0;
+  var transX = 0, transY = 0, transMoved = 0;
   var map = new robinHood(16);
   var view = new mapView(map);
   view.side = 55;
@@ -223,7 +223,7 @@ function onLoad() {
 
       ctx.globalCompositeOperation = 'destination-over';
       // clear canvas
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.clearRect(-transX, -transY, canvas.width, canvas.height);
 
       // drawing code
       ctx.strokeStyle = "black";
@@ -232,7 +232,7 @@ function onLoad() {
       ctx.textAlign = 'center';
 
       var firstEntry = map.capacity / 2 - Math.floor(canvas.width / 2 / view.side);
-      transX = -firstEntry * view.side;
+      transX = -firstEntry * view.side + transMoved;
       transY = 30;
       ctx.translate(transX, transY);
       view.draw(ctx);
@@ -262,10 +262,35 @@ function onLoad() {
   }
 
   if(canvas.getContext) {
-    canvas.addEventListener('mouseup',function(event) {
+    var lastX = 0, dragging = false;
+
+    canvas.addEventListener('mousemove', function(e) {
+      var event = e || event;
+      if(dragging) {
+        var delta = event.offsetX - lastX;
+        transMoved += delta;
+        lastX = event.offsetX;
+      }
+    });
+
+    canvas.addEventListener('mousedown', function(e) {
+      var event = e || event;
+      lastX = event.offsetX;
       var pos = getMousePos(canvas, event);
-      pos.y -= 15;
       if(pos.y >= 0 && pos.y <= view.side && pos.x >= 0 && pos.x <= map.capacity * view.side) {
+        // within box
+      } else {
+        dragging = true;
+      }
+    });
+
+    canvas.addEventListener('mouseup', function(event) {
+      dragging = false;
+      var pos = getMousePos(canvas, event);
+      if(pos.y >= 0 && pos.y <= view.side && pos.x >= 0 && pos.x <= map.capacity * view.side) {
+        var load_factor = document.getElementById('load-factor');
+        map.load_factor = parseFloat(load_factor.value);
+
         var bucketId = Math.floor(pos.x / view.side);
         if(event.button == 0) {
           var text = "el" + Math.floor(Math.random() * 100);
@@ -285,6 +310,12 @@ function onLoad() {
     map = new robinHood();
     view.map = map;
     view.update();
+  });
+
+  var reset_pos_btn = document.getElementById('reset-x');
+
+  reset_pos_btn.addEventListener('click', function(event) {
+    transMoved = 0;
   });
 
   var insert_random = document.getElementById('insert-random');
