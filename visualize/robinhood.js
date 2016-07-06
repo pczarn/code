@@ -16,14 +16,15 @@ function drawArrow(ctx, pt, angle, size=10) {
 }
 
 class robinHood {
-  constructor(capacity) {
+  constructor(capacity=16, load_factor=0.9) {
     this.table = Array(capacity);
     this.size = 0;
+    this.load_factor = load_factor;
   }
 
   insert(pos, elem) {
-    if(this.size + 1 >= this.table.length * 0.9) {
-      this.resize(this.size * 2);
+    if(this.size >= this.capacity * this.load_factor) {
+      this.resize(this.capacity * 2);
     }
     // robin hood here
     var initial = pos;
@@ -70,7 +71,7 @@ class robinHood {
   }
 
   resize(newSize) {
-    var map = new robinHood(newSize);
+    var map = new robinHood(newSize, this.load_factor);
     for(var i=0; i<this.table.length; i++) {
       if(this.table[i] !== undefined) {
         map.insert(this.table[i].initial, this.table[i].text);
@@ -277,6 +278,24 @@ function onLoad() {
     });
     window.requestAnimationFrame(draw);
   }
+
+  var reset_btn = document.getElementById('reset-map');
+
+  reset_btn.addEventListener('click', function(event) {
+    map = new robinHood();
+    view.map = map;
+    view.update();
+  });
+
+  var insert_random = document.getElementById('insert-random');
+
+  insert_random.addEventListener('click', function(event) {
+    for(var i=0; i<10; i++) {
+      var text = "el" + Math.floor(Math.random() * 100);
+      map.insert(Math.floor(Math.random() * map.capacity), text);
+    }
+    view.update();
+  });
 }
 
 document.addEventListener('DOMContentLoaded', onLoad, false);

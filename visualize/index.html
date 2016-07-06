@@ -8,5 +8,17 @@
 </head>
 <body>
 <canvas height="600" width="800" id="visualization">Not supported canvas</canvas>
+<div class="toolbox">
+  <p>
+    Click inside boxes to add elements.
+    Drag elsewhere to move.
+  </p>
+  <button id="reset-x">Center view</button>
+  <button id="reset-map">Reset the map</button>
+  <button id="insert-random">Insert random</button>
+  <label for="load-factor">Load factor</label>
+  <!-- important to have the load factor non-zero and no higher than 1 -->
+  <input type="range" id="load-factor" min="0.01" max="1" step="0.01" value="0.9">
+</div>
 </body>
 </html>
