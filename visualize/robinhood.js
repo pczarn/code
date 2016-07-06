@@ -12,7 +12,6 @@ function drawArrow(ctx, pt, angle, size=10) {
   ctx.lineTo(asx, asy);
   ctx.lineTo(arx, ary);
   ctx.lineTo(pt.x, pt.y);
-  ctx.fill();
 }
 
 class robinHood {
@@ -68,6 +67,7 @@ class robinHood {
     }
     // Delete.
     this.table[pos] = undefined;
+    this.size -= 1;
   }
 
   resize(newSize) {
@@ -98,6 +98,7 @@ class mapView {
   constructor(map) {
     this.map = map;
     this.update();
+    this.arrowsIn = new Set();
   }
 
   update() {
@@ -114,15 +115,7 @@ class mapView {
         ary.push(edge);
       }
     }
-    // var arrowsIn = new Set();
-    // for(let edge of ary) {
-    //   var dst_x = edge.to * side + side / 3;
-    //   arrowsIn.add(dst_x);
-    // }
-
     // Compute levels
-    // ary.sort((a, b) => a.from - a.to - (b.from - b.to));
-    // ary.sort((a, b) => a.from - b.from);
     var edges = new Map();
     for(var i=0; i<ary.length; i++) {
       var to = ary[i].to;
@@ -131,16 +124,9 @@ class mapView {
       }
       edges.get(to).add(ary[i].from);
     }
-    // for(var to in edges) {
-    //   edges[to].maxFrom = edges[to].
-    // }
     var processed = [];
     var levels = [];
     for(var [nextTo, nextFrom] of edges) {
-      // var iter = edges[Symbol.iterator]();
-      // var next = iter.next();
-      // var nextFrom = next.value;
-      // var nextTo = next.key;
       var skip_until = Math.max(...nextFrom.values());
       // Find a suitable level
       var freeLevel = levels.findIndex(level => level <= nextTo);
@@ -156,19 +142,8 @@ class mapView {
         from: nextFrom,
         level: freeLevel
       });
-      // for(var [key, val] of iter) {
-      //   var next = edges[to];
-      //   var skip_until = Math.max([...next.values()]);
-      //   while(idx + 1 < ary.length && ary[idx + 1].to < skip_until) {
-      //     new_ary.push(ary[idx + 1]);
-      //     idx += 1;
-      //   }
-      //   current_level.push(next);
-      // }
     }
     // Save work
-    // this.arrowsIn = arrowsIn;
-    this.arrowsIn = new Set();
     this.edges = processed;
   }
 
@@ -180,10 +155,11 @@ class mapView {
     }
     ctx.stroke();
 
+    ctx.beginPath();
     for(let dst_x of this.arrowsIn) {
-        ctx.beginPath();
         drawArrow(ctx, {x: dst_x, y: side * 4 / 5}, Math.PI*3/2, 7);
     }
+    ctx.fill();
     this.arrowsIn.clear();
   }
 
@@ -241,7 +217,7 @@ class mapView {
 function onLoad() {
   var canvas = document.getElementById('visualization');
   var transX = 0, transY = 0, transMoved = 0;
-  var map = new robinHood(16);
+  var map = new robinHood();
   var view = new mapView(map);
   view.side = 55;
 
