@@ -11,11 +11,12 @@
 <div class="toolbox">
   <p>
     Click inside boxes to add elements.
-    Drag elsewhere to move.
+    Right click to remove elements.
+    Drag anywhere to move.
   </p>
-  <button id="reset-x">Center view</button>
-  <button id="reset-map">Reset the map</button>
-  <button id="insert-random">Insert random</button>
+  <input type="button" id="reset-x" value="Center view">
+  <input type="button" id="reset-map" value="Reset the map">
+  <input type="button" id="insert-random" value="Insert random"><br>
   <label for="load-factor">Load factor</label>
   <!-- important to have the load factor non-zero and no higher than 1 -->
   <input type="range" id="load-factor" min="0.01" max="1" step="0.01" value="0.9">

@@ -1,5 +1,8 @@
 "use strict";
 
+const PADDING_TOP = 60;
+const SIDE_LENGTH = 55;
+
 function drawArrow(ctx, pt, angle, size=10) {
   var alx = pt.x - size*Math.cos(angle - Math.PI/6),
       aly = pt.y - size*Math.sin(angle - Math.PI/6);
@@ -230,7 +233,7 @@ function onLoad() {
   var transX = 0, transY = 0, transMoved = 0;
   var map = new robinHood();
   var view = new mapView(map);
-  view.side = 55;
+  view.side = SIDE_LENGTH;
 
   function draw() {
     if(canvas.getContext) {
@@ -250,7 +253,7 @@ function onLoad() {
 
       var firstEntry = map.capacity / 2 - Math.floor(canvas.width / 2 / view.side);
       transX = -firstEntry * view.side + transMoved;
-      transY = 30;
+      transY = PADDING_TOP;
       ctx.translate(transX, transY);
       view.draw(ctx);
 
@@ -345,7 +348,7 @@ function onLoad() {
         event.preventDefault();
         return false;
       }
-    });
+    }, false);
 
     window.requestAnimationFrame(draw);
   }
