@@ -1,7 +1,7 @@
 "use strict";
 
 const PADDING_TOP = 60;
-const SIDE_LENGTH = 55;
+const SIDE_LENGTH = 45;
 
 function drawArrow(ctx, pt, angle, size=10) {
   var alx = pt.x - size*Math.cos(angle - Math.PI/6),
@@ -370,6 +370,7 @@ function onLoad() {
     map = new robinHood();
     view.map = map;
     view.update();
+    transMoved = 0;
   });
 
   var reset_pos_btn = document.getElementById('reset-x');
