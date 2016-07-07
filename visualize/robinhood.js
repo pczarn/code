@@ -40,23 +40,7 @@ class robinHood {
       // check if the occupied entry is more fortunate
       if(occupied.pos % this.capacity > elem.pos % this.capacity) {
         // Begin robin hood
-        var ousted = occupied;
-        this.table[pos] = elem;
-        pos += 1;
-        pos %= this.capacity;
-        while(this.table[pos] !== undefined) {
-          var occupied = this.table[pos];
-          if(occupied.pos % this.capacity > ousted.pos % this.capacity) {
-            //recurse
-            this.table[pos] = ousted;
-            ousted = occupied;
-          }
-          pos += 1;
-          pos %= this.capacity;
-        }
-        this.table[pos] = ousted;
-        this.size += 1;
-        // End robin hood
+        this.robinHood(pos, elem);
         return;
       }
       pos += 1;
@@ -89,8 +73,23 @@ class robinHood {
     this.size = map.size;
   }
 
-  robin_hood(pos) {
-    // TODO
+  robinHood(pos, elem) {
+    var ousted = this.table[pos];
+    this.table[pos] = elem;
+    pos += 1;
+    pos %= this.capacity;
+    while(this.table[pos] !== undefined) {
+      var occupied = this.table[pos];
+      if(occupied.pos % this.capacity > ousted.pos % this.capacity) {
+        //recurse
+        this.table[pos] = ousted;
+        ousted = occupied;
+      }
+      pos += 1;
+      pos %= this.capacity;
+    }
+    this.table[pos] = ousted;
+    this.size += 1;
   }
 
   iterator() {
@@ -136,7 +135,6 @@ class mapView {
     }
     // Sort edges by key first
     edges = new Map([...edges.entries()].sort((a, b) => a[0] - b[0]));
-    console.log(...edges.entries());
     var processed = [];
     var levels = [];
     for(var [nextTo, nextFrom] of edges) {
