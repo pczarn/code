@@ -331,6 +331,14 @@ function onLoad() {
       }
     });
 
+    canvas.addEventListener('wheel', function(event) {
+      if(event.deltaMode == MouseEvent.DOM_DELTA_PIXEL) {
+        transMoved += event.deltaY;
+      } else {
+        transMoved += event.deltaY * 35;
+      }
+    }, false);
+
     canvas.addEventListener('contextmenu', function(event) {
       var bucket = bucketFromMousePos(event);
       if(bucket) {
