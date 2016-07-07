@@ -32,21 +32,27 @@ class robinHood {
     var elem = {
       text: value,
       pos: pos
-    }
+    };
     // get relative position.
     pos %= this.capacity;
-    while(this.table[pos] !== undefined) {
-      var occupied = this.table[pos];
+    var elemInitial = pos;
+    while(this.table[pos % this.capacity] !== undefined) {
+      var occupied = this.table[pos % this.capacity];
+      var occupiedInitial = pos - ((pos - occupied.pos) & (this.capacity - 1));
       // check if the occupied entry is more fortunate
-      if(occupied.pos % this.capacity > elem.pos % this.capacity) {
+      if(occupiedInitial > elemInitial) {
         // Begin robin hood
         this.robinHood(pos, elem);
         return;
       }
       pos += 1;
-      pos %= this.capacity;
+      // Sanity assert
+      if(pos >= elemInitial + this.size + 1) {
+        // error
+        return;
+      }
     }
-    this.table[pos] = elem;
+    this.table[pos % this.capacity] = elem;
     this.size += 1;
   }
 
@@ -74,21 +80,24 @@ class robinHood {
   }
 
   robinHood(pos, elem) {
-    var ousted = this.table[pos];
-    this.table[pos] = elem;
+    var ousted = this.table[pos % this.capacity];
+    this.table[pos % this.capacity] = elem;
+    // Bitwise, because pos - ousted.pos can be negative.
+    var currentInitial = pos - ((pos - ousted.pos) & (this.capacity - 1));
     pos += 1;
-    pos %= this.capacity;
-    while(this.table[pos] !== undefined) {
-      var occupied = this.table[pos];
-      if(occupied.pos % this.capacity > ousted.pos % this.capacity) {
+    while(this.table[pos % this.capacity] !== undefined) {
+      var occupied = this.table[pos % this.capacity];
+      var occupiedInitial = pos - ((pos - occupied.pos) & (this.capacity - 1));
+      // fixme
+      if(occupiedInitial > currentInitial) {
         //recurse
-        this.table[pos] = ousted;
+        this.table[pos % this.capacity] = ousted;
         ousted = occupied;
+        currentInitial = occupiedInitial;
       }
       pos += 1;
-      pos %= this.capacity;
     }
-    this.table[pos] = ousted;
+    this.table[pos % this.capacity] = ousted;
     this.size += 1;
   }
 
