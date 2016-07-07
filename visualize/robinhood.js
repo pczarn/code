@@ -24,24 +24,29 @@ class robinHood {
     this.load_factor = load_factor;
   }
 
-  insert(pos, elem) {
+  insert(pos, value) {
     if(this.size >= this.capacity * this.load_factor) {
       this.resize(this.capacity * 2);
     }
-    // robin hood here
-    var initial = pos;
+    // remember absolute position.
+    var elem = {
+      text: value,
+      pos: pos
+    }
+    // get relative position.
+    pos %= this.capacity;
     while(this.table[pos] !== undefined) {
       var occupied = this.table[pos];
       // check if the occupied entry is more fortunate
-      if(occupied.initial > initial) {
+      if(occupied.pos % this.capacity > elem.pos % this.capacity) {
         // Begin robin hood
         var ousted = occupied;
-        this.table[pos] = {text: elem, initial: initial};
+        this.table[pos] = elem;
         pos += 1;
         pos %= this.capacity;
         while(this.table[pos] !== undefined) {
           var occupied = this.table[pos];
-          if(occupied.initial > ousted.initial) {
+          if(occupied.pos % this.capacity > ousted.pos % this.capacity) {
             //recurse
             this.table[pos] = ousted;
             ousted = occupied;
@@ -57,13 +62,13 @@ class robinHood {
       pos += 1;
       pos %= this.capacity;
     }
-    this.table[pos] = {text: elem, initial: initial};
+    this.table[pos] = elem;
     this.size += 1;
   }
 
   remove(pos) {
     // Back shift.
-    while(this.table[pos + 1] !== undefined && this.table[pos + 1].initial <= pos) {
+    while(this.table[pos + 1] !== undefined && this.table[pos + 1].pos <= pos) {
       this.table[pos] = this.table[pos + 1];
       pos += 1;
       pos %= this.capacity;
@@ -77,7 +82,7 @@ class robinHood {
     var map = new robinHood(newSize, this.load_factor);
     for(var i=0; i<this.table.length; i++) {
       if(this.table[i] !== undefined) {
-        map.insert(this.table[i].initial, this.table[i].text);
+        map.insert(this.table[i].pos, this.table[i].text);
       }
     }
     this.table = map.table;
@@ -110,8 +115,10 @@ class mapView {
     for(var i=0; i<this.map.capacity; i++) {
       var next = this.map.table[i];
       if(next !== undefined) {
-        // .initial can be undefined??
-        var edge = {from: i, to: next.initial};
+        var edge = {
+          from: i,
+          to: next.pos % this.map.capacity
+        };
         if(edge.to > edge.from) {
           edge.from += this.map.capacity;
         }
@@ -127,6 +134,9 @@ class mapView {
       }
       edges.get(to).add(ary[i].from);
     }
+    // Sort edges by key first
+    edges = new Map([...edges.entries()].sort((a, b) => a[0] - b[0]));
+    console.log(...edges.entries());
     var processed = [];
     var levels = [];
     for(var [nextTo, nextFrom] of edges) {
@@ -326,7 +336,8 @@ function onLoad() {
         map.load_factor = parseFloat(load_factor.value);
         if(event.button == 0) {
           var text = "el" + Math.floor(Math.random() * 100);
-          map.insert(bucket, text);
+          var randomInt = Math.floor(Math.random() * (1 << 16));
+          map.insert(bucket + randomInt * map.capacity, text);
         } else {
           map.remove(bucket);
         }
@@ -372,7 +383,8 @@ function onLoad() {
   insert_random.addEventListener('click', function(event) {
     for(var i=0; i<10; i++) {
       var text = "el" + Math.floor(Math.random() * 100);
-      map.insert(Math.floor(Math.random() * map.capacity), text);
+      var randomInt = Math.floor(Math.random() * (1 << 16));
+      map.insert(randomInt, text);
     }
     view.update();
   });
