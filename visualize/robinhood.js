@@ -38,11 +38,12 @@ class robinHood {
     var elemInitial = pos;
     while(this.table[pos % this.capacity] !== undefined) {
       var occupied = this.table[pos % this.capacity];
+      // Bitwise, because pos - ousted.pos can be negative.
       var occupiedInitial = pos - ((pos - occupied.pos) & (this.capacity - 1));
       // check if the occupied entry is more fortunate
       if(occupiedInitial > elemInitial) {
         // Begin robin hood
-        this.robinHood(pos, elem);
+        this.robinHood(pos, elem, occupiedInitial);
         return;
       }
       pos += 1;
@@ -79,11 +80,9 @@ class robinHood {
     this.size = map.size;
   }
 
-  robinHood(pos, elem) {
+  robinHood(pos, elem, currentInitial) {
     var ousted = this.table[pos % this.capacity];
     this.table[pos % this.capacity] = elem;
-    // Bitwise, because pos - ousted.pos can be negative.
-    var currentInitial = pos - ((pos - ousted.pos) & (this.capacity - 1));
     pos += 1;
     while(this.table[pos % this.capacity] !== undefined) {
       var occupied = this.table[pos % this.capacity];
