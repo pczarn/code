@@ -1,25 +1,11 @@
 <!DOCTYPE html>
 <html>
-<head>
-  <meta charset="utf-8" />
-  <title>Visualization of Robin Hood hashing</title>
-  <script type="text/javascript" src="robinhood.js"></script>
-  <link href="style.css" rel="stylesheet" type="text/css">
-</head>
-<body>
-<canvas height="600" width="800" id="visualization">Not supported canvas</canvas>
-<div class="toolbox">
-  <p>
-    Click inside boxes to add elements.
-    Right click to remove elements.
-    Drag anywhere to move.
-  </p>
-  <input type="button" id="reset-x" value="Center view">
-  <input type="button" id="reset-map" value="Reset everything">
-  <input type="button" id="insert-random" value="Insert 10 random"><br>
-  <label for="load-factor">Load factor</label>
-  <!-- important to have the load factor non-zero and no higher than 1 -->
-  <input type="range" id="load-factor" min="0.01" max="1" step="0.01" value="0.9">
-</div>
-</body>
+  <head>
+    <meta charset="utf-8">
+    <title>Visualization of Robin Hood hashing</title>
+  </head>
+  <body>
+    <div id="app"></div>
+    <!-- built files will be auto injected -->
+  </body>
 </html>

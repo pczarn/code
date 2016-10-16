@@ -107,6 +107,10 @@ class robinHood {
   get capacity() {
     return this.table.length;
   }
+
+  set capacity(cap) {
+    this.table = Array(cap);
+  }
 }
 
 class mapView {
@@ -244,11 +248,12 @@ class mapView {
   }
 }
 
+  var map = new robinHood();
+  var view = new mapView(map);
+
 function onLoad() {
   var canvas = document.getElementById('visualization');
   var transX = 0, transY = 0, transMoved = 0;
-  var map = new robinHood();
-  var view = new mapView(map);
   view.side = SIDE_LENGTH;
 
   function draw() {
