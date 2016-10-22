@@ -2,97 +2,97 @@ import Vue from 'vue'
 
 class robinHood {
   constructor(capacity=16, load_factor=0.9) {
-    this.table = Array(capacity);
-    this.size = 0;
-    this.load_factor = load_factor;
+    this.table = Array(capacity)
+    this.size = 0
+    this.load_factor = load_factor
   }
 
   insert(pos, value) {
     if(this.size >= this.capacity * this.load_factor) {
-      this.resize(this.capacity * 2);
+      this.resize(this.capacity * 2)
     }
     // remember absolute position.
     var elem = {
       text: value,
       pos: pos
-    };
+    }
     // get relative position.
-    pos %= this.capacity;
-    var elemInitial = pos;
+    pos %= this.capacity
+    var elemInitial = pos
     while(this.table[pos % this.capacity] !== undefined) {
-      var occupied = this.table[pos % this.capacity];
+      var occupied = this.table[pos % this.capacity]
       // Bitwise, because pos - ousted.pos can be negative.
-      var occupiedInitial = pos - ((pos - occupied.pos) & (this.capacity - 1));
+      var occupiedInitial = pos - ((pos - occupied.pos) & (this.capacity - 1))
       // check if the occupied entry is more fortunate
       if(occupiedInitial > elemInitial) {
         // Begin robin hood
-        this.robinHood(pos, elem, occupiedInitial);
-        return;
+        this.robinHood(pos, elem, occupiedInitial)
+        return
       }
-      pos += 1;
+      pos += 1
       // Sanity assert
       if(pos >= elemInitial + this.size + 1) {
         // error
-        return;
+        return
       }
     }
     Vue.set(this.table, pos % this.capacity, elem)
-    this.size += 1;
+    this.size += 1
   }
 
   remove(pos) {
     // Back shift.
     while(this.table[pos + 1] !== undefined && this.table[pos + 1].pos <= pos) {
-      this.table[pos] = this.table[pos + 1];
-      pos += 1;
-      pos %= this.capacity;
+      this.table[pos] = this.table[pos + 1]
+      pos += 1
+      pos %= this.capacity
     }
     // Delete.
-    Vue.set(this.table, pos, undefined);
-    this.size -= 1;
+    Vue.set(this.table, pos, undefined)
+    this.size -= 1
   }
 
   resize(newSize) {
-    var map = new robinHood(newSize, this.load_factor);
+    var map = new robinHood(newSize, this.load_factor)
     for(var i=0; i<this.table.length; i++) {
       if(this.table[i] !== undefined) {
-        map.insert(this.table[i].pos, this.table[i].text);
+        map.insert(this.table[i].pos, this.table[i].text)
       }
     }
-    this.table = map.table;
-    this.size = map.size;
+    this.table = map.table
+    this.size = map.size
   }
 
   robinHood(pos, elem, currentInitial) {
-    var ousted = this.table[pos % this.capacity];
-    this.table[pos % this.capacity] = elem;
-    pos += 1;
+    var ousted = this.table[pos % this.capacity]
+    this.table[pos % this.capacity] = elem
+    pos += 1
     while(this.table[pos % this.capacity] !== undefined) {
-      var occupied = this.table[pos % this.capacity];
-      var occupiedInitial = pos - ((pos - occupied.pos) & (this.capacity - 1));
+      var occupied = this.table[pos % this.capacity]
+      var occupiedInitial = pos - ((pos - occupied.pos) & (this.capacity - 1))
       // fixme
       if(occupiedInitial > currentInitial) {
         //recurse
-        this.table[pos % this.capacity] = ousted;
-        ousted = occupied;
-        currentInitial = occupiedInitial;
+        this.table[pos % this.capacity] = ousted
+        ousted = occupied
+        currentInitial = occupiedInitial
       }
-      pos += 1;
+      pos += 1
     }
-    Vue.set(this.table, pos % this.capacity, ousted);
-    this.size += 1;
+    Vue.set(this.table, pos % this.capacity, ousted)
+    this.size += 1
   }
 
   iterator() {
-    return this.table[Symbol.iterator]();
+    return this.table[Symbol.iterator]()
   }
 
   get capacity() {
-    return this.table.length;
+    return this.table.length
   }
 
   set capacity(cap) {
-    this.table = Array(cap);
+    this.table = Array(cap)
   }
 }
 
@@ -117,7 +117,7 @@ export const robinHoodModule = {
       state.map.capacity = cap
     },
     RESIZE (state, newSize) {
-      // var map = new Vuex.Store(robinHoodModule);
+      // var map = new Vuex.Store(robinHoodModule)
       // map.state.size = newSize
       // map.state.loadFactor = state.loadFactor
       // for(var i=0; i<state.table.length; i++) {
