@@ -71,22 +71,15 @@ class robinHood {
     this.size = map.size
   }
 
-  robinHood(pos, elem, currentInitial) {
-    var ousted = this.table[pos % this.capacity]
-    Vue.set(this.table, pos % this.capacity, elem)
-    pos += 1
+  robinHood(pos, unbound, currentInitial)
     while(this.table[pos % this.capacity] !== undefined) {
-      var occupied = this.table[pos % this.capacity]
-      var occupiedInitial = pos - ((pos - occupied.hash) & (this.capacity - 1))
-      if(occupiedInitial > currentInitial) {
-        //recurse
-        this.table[pos % this.capacity] = ousted
-        ousted = occupied
-        currentInitial = occupiedInitial
-      }
+      // forward-shift
+      const tmpElem = this.table[pos % this.capacity]
+      this.table[pos % this.capacity] = unbound
+      unbound = tmpElem
       pos += 1
     }
-    this.table[pos % this.capacity] = ousted
+    Vue.set(this.table, pos % this.capacity, unbound)
     this.size += 1
   }
 
