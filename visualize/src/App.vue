@@ -6,7 +6,6 @@
 
 <script>
 import Hello from './components/Hello'
-// import store from 'src/store'
 
 export default {
   components: {

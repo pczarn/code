@@ -27,8 +27,8 @@
 </template>
 
 <script>
-import { mapGetters, mapMutations } from 'vuex'
-import { row } from 'src/draw'
+import { mapGetters, mapMutations, mapActions } from 'vuex'
+import draw from 'src/draw'
 
 const PADDING_TOP = 60
 const SIDE_LENGTH = 45
@@ -61,7 +61,7 @@ export default {
         if(next !== undefined) {
           var edge = {
             from: i,
-            to: next.pos % this.capacity
+            to: next.hash % this.capacity
           }
           if(edge.to > edge.from) {
             edge.from += this.capacity
@@ -100,6 +100,9 @@ export default {
         })
       }
       return processed
+    },
+    highlightEdge () {
+      return this.edges.find(edge => edge.to === this.highlight)
     },
     ...mapGetters(['map', 'capacity']),
   },
@@ -150,14 +153,13 @@ export default {
         }
       }
       ctx.stroke()
-      var highlightEdge = this.edges.find(edge => edge.to === this.highlight)
-      if(highlightEdge !== undefined) {
+      if(this.highlightEdge !== undefined) {
         // highlighted
         ctx.save()
         ctx.strokeStyle = "red"
         ctx.fillStyle = "red"
         ctx.beginPath()
-          this.drawEdgeSet(ctx, highlightEdge)
+          this.drawEdgeSet(ctx, this.highlightEdge)
         ctx.stroke()
         ctx.restore()
       }
@@ -177,14 +179,16 @@ export default {
       ctx.lineTo(0, side)
       // Draw closed squares
       for(var i=0; i<this.map.capacity; i++) {
-        var next = iter.next()
         ctx.moveTo((i + 1) * side, 0)
         ctx.lineTo((i + 1) * side, side)
-        if(!next.done && next.value !== undefined) {
-          ctx.fillText(next.value.text, i * side + side / 2, side / 2)
-        }
       }
       ctx.stroke()
+      for(var i=0; i<this.map.capacity; i++) {
+        var next = iter.next()
+        if(!next.done && next.value !== undefined) {
+          draw.shape(ctx, next.value.value, i * side, 0, side)
+        }
+      }
     },
     drawEdgeSet (ctx, edgeSet) {
       ctx.beginPath()
@@ -212,7 +216,7 @@ export default {
         }
       ctx.stroke()
       ctx.beginPath()
-        row(ctx, {x: dst_x, y: side * 4 / 5}, Math.PI*3/2, 7)
+        draw.arrow(ctx, {x: dst_x, y: side * 4 / 5}, Math.PI*3/2, 7)
       ctx.fill()
     },
 
@@ -237,19 +241,19 @@ export default {
       if(bucket === null) {
         // dragging outside the box
         this.dragging = true
+        event.stopPropagation()
+      } else {
+        event.stopPropagation()
       }
     },
     mouseup (event) {
       this.dragging = false
       const bucket = this.bucketFromMousePos(event)
       if(bucket !== null) {
+        event.stopPropagation()
+        event.preventDefault()
         if(event.button == 0) {
-          var text = "el" + Math.floor(Math.random() * 100)
-          var randomInt = Math.floor(Math.random() * (1 << 16))
-          this.insert({
-            pos: bucket + randomInt * this.capacity,
-            value: text
-          })
+          this.insert(bucket)
         } else {
           this.remove(bucket)
         }
@@ -295,17 +299,19 @@ export default {
     },
     insertRandom (event) {
       for(var i=0; i<10; i++) {
-        var text = "el" + Math.floor(Math.random() * 100)
-        var randomInt = Math.floor(Math.random() * (1 << 16))
-        this.insert({ pos: randomInt, value: text })
+        var randomBucket = Math.floor(Math.random() * this.capacity)
+        this.insert(randomBucket)
       }
     },
     ...mapMutations({
       setCapacity: 'SET_CAPACITY',
-      insert: 'INSERT',
+      // insert: 'INSERT',
       remove: 'REMOVE',
       resize: 'RESIZE',
       reset: 'RESET',
+    }),
+    ...mapActions({
+      insert: 'INSERT_RANDOM',
     })
   }
 }
