@@ -1,29 +1,29 @@
 <template>
-  <div>
-    <canvas height="600"
-            width="800"
-            id="visualization"
-            @mouseup="mouseup"
-            @mousemove="mousemove"
-            @mousedown="mousedown"
-            @wheel="wheel"
-            @contextmenu="contextmenu"
-            ref="canvas"
-    >Not supported canvas</canvas>
-    <div class="toolbox">
-      <p>
-        Click inside boxes to add elements.
-        Right click to remove elements.
-        Drag anywhere to move.
-      </p>
-      <input type="button" value="Center view" @click="resetX()">
-      <input type="button" value="Reset everything" @click="resetMap()">
-      <input type="button" value="Insert 10 random" @click="insertRandom(10)"><br>
-      <label for="load-factor">Load factor</label>
-      <!-- important to have the load factor non-zero and no higher than 1 -->
-      <input type="range" min="0.01" max="1" step="0.01" v-model="loadFactor">
-    </div>
+<div>
+  <canvas height="600"
+          width="800"
+          id="visualization"
+          @mouseup="mouseup"
+          @mousemove="mousemove"
+          @mousedown="mousedown"
+          @wheel="wheel"
+          @contextmenu="contextmenu"
+          ref="canvas"
+  >Not supported canvas</canvas>
+  <div class="toolbox">
+    <p>
+      Click inside boxes to add elements.
+      Right click to remove elements.
+      Drag anywhere to move.
+    </p>
+    <input type="button" value="Center view" @click="resetX()">
+    <input type="button" value="Reset everything" @click="resetMap()">
+    <input type="button" value="Insert 10 random" @click="insertRandom(10)"><br>
+    <label for="load-factor">Load factor</label>
+    <!-- important to have the load factor non-zero and no higher than 1 -->
+    <input type="range" min="0.01" max="1" step="0.01" v-model="loadFactor">
   </div>
+</div>
 </template>
 
 <script>
@@ -312,15 +312,15 @@ export default {
 </script>
 
 <style scoped>
-  canvas {
-    position: absolute;
-  }
+canvas {
+  position: absolute;
+}
 
-  .toolbox {
-    position: fixed;
-    bottom: 50px;
-    left: 50px;
-    border: 2px solid gray;
-    padding: 12px 12px;
-  }
+.toolbox {
+  position: fixed;
+  bottom: 50px;
+  left: 50px;
+  border: 2px solid gray;
+  padding: 12px 12px;
+}
 </style>
