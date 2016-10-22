@@ -1,7 +1,5 @@
 <template>
   <div id="app">
-    test
-    {{ $store.state }}
     <hello></hello>
   </div>
 </template>
@@ -18,32 +16,16 @@ export default {
 </script>
 
 <style>
-html {
+html, body {
+  width:  100%;
   height: 100%;
-}
-
-body {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
+  margin: 0px;
+  padding: 0px;
+  overflow: hidden;
 }
 
 #app {
   color: #2c3e50;
-  margin-top: -100px;
-  max-width: 600px;
   font-family: Source Sans Pro, Helvetica, sans-serif;
-  text-align: center;
-}
-
-#app a {
-  color: #42b983;
-  text-decoration: none;
-}
-
-.logo {
-  width: 100px;
-  height: 100px
 }
 </style>

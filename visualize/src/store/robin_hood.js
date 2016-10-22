@@ -1,3 +1,5 @@
+import Vue from 'vue'
+
 class robinHood {
   constructor(capacity=16, load_factor=0.9) {
     this.table = Array(capacity);
@@ -34,7 +36,7 @@ class robinHood {
         return;
       }
     }
-    this.table[pos % this.capacity] = elem;
+    Vue.set(this.table, pos % this.capacity, elem)
     this.size += 1;
   }
 
@@ -46,7 +48,7 @@ class robinHood {
       pos %= this.capacity;
     }
     // Delete.
-    this.table[pos] = undefined;
+    Vue.set(this.table, pos, undefined);
     this.size -= 1;
   }
 
@@ -77,7 +79,7 @@ class robinHood {
       }
       pos += 1;
     }
-    this.table[pos % this.capacity] = ousted;
+    Vue.set(this.table, pos % this.capacity, ousted);
     this.size += 1;
   }
 
@@ -94,27 +96,25 @@ class robinHood {
   }
 }
 
-function toMap(state) {
-  let map = new RobinHood(0, state.loadFactor)
-  map.table = state.table
-  map.size = state.size
-}
-
-function fromMap(state, map) {
-  state.size = map.size
-  state.loadFactor = map.load_factor
-  state.table = map.table
-}
+// function toMap(state) {
+//   let map = new RobinHood(0, state.loadFactor)
+//   map.table = state.table
+//   map.size = state.size
+// }
+//
+// function fromMap(state, map) {
+//   state.size = map.size
+//   state.loadFactor = map.load_factor
+//   state.table = map.table
+// }
 
 export const robinHoodModule = {
   state: {
-    table: [],
-    size: [],
-    loadFactor: 0.9,
+    map: new robinHood(),
   },
   mutations: {
     SET_CAPACITY (state, cap) {
-      // state.map.capacity = cap
+      state.map.capacity = cap
     },
     RESIZE (state, newSize) {
       // var map = new Vuex.Store(robinHoodModule);
@@ -127,24 +127,33 @@ export const robinHoodModule = {
       // }
       // state.table = map.state.table
       // state.size = map.state.
-      let map = toMap(state)
-      map.resize(newSize)
-      fromMap(state, pos)
+      // let map = toMap(state)
+      state.map.resize(newSize)
+      // fromMap(state, pos)
     },
-    INSERT (state, [pos, value]) {
-      let map = toMap(state)
-      map.insert(pos, value)
-      fromMap(state, pos)
+    INSERT (state, { pos, value }) {
+      // let map = toMap(state)
+      state.map.insert(pos, value)
+      // fromMap(state, pos)
     },
     REMOVE (state, pos) {
-      let map = toMap(state)
-      map.remove(pos)
-      fromMap(state, pos)
+      // let map = toMap(state)
+      state.map.remove(pos)
+      // fromMap(state, pos)
+    },
+    RESET (state) {
+      state.map = new robinHood()
     },
   },
   getters: {
     capacity (state) {
-      state.map.capacity
-    }
+      return state.map.capacity
+    },
+    map (state) {
+      return state.map
+    },
+    iterator (state) {
+      return state.map.iterator()
+    },
   },
 }

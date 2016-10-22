@@ -6,8 +6,6 @@ Vue.use(Vuex)
 
 export const store = new Vuex.Store({
   modules: {
-    map: robinHoodModule
-  }
+    map: robinHoodModule,
+  },
 })
-
-// export const store = new Vuex.Store(robinHoodModule)
