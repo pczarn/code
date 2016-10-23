@@ -36,7 +36,7 @@
 import { mapGetters, mapMutations, mapActions } from 'vuex'
 import draw from 'src/draw'
 
-const PADDING_TOP = 60
+const PADDING_TOP = 70
 const SIDE_LENGTH = 45
 
 export default {
@@ -142,19 +142,19 @@ export default {
         this.transX = -firstEntry * this.side + this.transMoved
         this.transY = PADDING_TOP
         ctx.translate(this.transX, this.transY)
-        this.drawBuckets(ctx)
 
-        ctx.save()
-        ctx.translate(-this.map.capacity * this.side, 0)
-        ctx.strokeStyle = "#cccccc"
-        ctx.fillStyle = "#cccccc"
-        this.drawBuckets(ctx)
-
-        ctx.restore()
-        ctx.translate(this.map.capacity * this.side, 0)
-        ctx.strokeStyle = "#cccccc"
-        ctx.fillStyle = "#cccccc"
-        this.drawBuckets(ctx)
+        const first = Math.floor(-this.transX / (this.side * this.map.capacity))
+        const last = Math.ceil((-this.transX + canvas.width) / (this.side * this.map.capacity))
+        for(let i=first; i<last; i++) {
+          ctx.save()
+          ctx.translate(i * this.map.capacity * this.side, 0)
+          if(i & 1 == 1) {
+            ctx.strokeStyle = "#dddddd"
+            ctx.fillStyle = "#dddddd"
+          }
+          this.drawBuckets(ctx)
+          ctx.restore()
+        }
       }
 
       window.requestAnimationFrame(this.draw)

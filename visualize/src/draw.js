@@ -19,8 +19,6 @@ export default {
     const cY = y + side / 2
     const gradient = ctx.createLinearGradient(cX - dX, cY - dY, cX + dX, cY + dY)
     gradient.addColorStop(0, attrs.colors[0])
-    // gradient.addColorStop(0.5, attrs.colors[0])
-    // gradient.addColorStop(0.5, attrs.colors[1])
     gradient.addColorStop(1, attrs.colors[1])
     ctx.save()
     ctx.fillStyle = gradient
