@@ -18,7 +18,13 @@
     </p>
     <input type="button" value="Center view" @click="resetX()">
     <input type="button" value="Reset everything" @click="resetMap()">
-    <input type="button" value="Insert 10 random" @click="insertRandom(10)"><br>
+    <br>
+    Insert random
+    <template v-for="count in [1, 10, 100]">
+      <template v-if="count !== 1">,</template>
+      <input type="button" :value="count" @click="insertRandom(count)">
+    </template>
+    <br>
     <label for="load-factor">Load factor</label>
     <!-- important to have the load factor non-zero and no higher than 1 -->
     <input type="range" min="0.01" max="1" step="0.01" v-model="loadFactor">
