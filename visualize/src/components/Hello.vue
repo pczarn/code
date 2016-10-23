@@ -43,8 +43,9 @@ export default {
       transY: 0,
       transMoved: 0,
       lastX: 0,
-      dragging: false,
+      dragging: 0,
       highlight: false,
+      clickedBucket: null,
       msg: 'Hello Vue!',
     }
   },
@@ -103,6 +104,13 @@ export default {
     },
     highlightEdge () {
       return this.edges.find(edge => edge.to === this.highlight)
+    },
+    upArrows () {
+      if(this.clickedBucket) {
+        return this.map.movesForInsert(this.clickedBucket)
+      } else {
+        return []
+      }
     },
     ...mapGetters(['map', 'capacity']),
   },
@@ -163,6 +171,7 @@ export default {
         ctx.stroke()
         ctx.restore()
       }
+      this.drawArrows(ctx)
     },
     drawBoxes(ctx) {
       var side = this.side
@@ -219,11 +228,59 @@ export default {
         draw.arrow(ctx, {x: dst_x, y: side * 4 / 5}, Math.PI*3/2, 7)
       ctx.fill()
     },
+    drawArrows (ctx) {
+      const side = this.side
+      ctx.beginPath()
+      for(let [from, to] of this.upArrows) {
+        if(from === to) {
+          continue
+        }
+        let toArrowX, arrowAngle
+        if(from) {
+          let up
+          if(Math.abs(from - to) === 1) {
+            up = -20
+            arrowAngle = Math.PI * 2 / 16
+          } else if(Math.abs(from - to) < 5) {
+            up = -30
+            arrowAngle = Math.PI * 3 / 32
+          } else if(Math.abs(from - to) < 10) {
+            up = -30
+            arrowAngle = Math.PI / 16
+          } else {
+            up = -60
+            arrowAngle = Math.PI / 24
+          }
+          const third = side / 3
+          let fromOffset, toOffset
+          if(to > from) {
+            fromOffset = third * 2
+            toOffset = side / 2
+          } else {
+            fromOffset = side / 2
+            toOffset = third * 2
+          }
+          ctx.moveTo(from * side + fromOffset, -10)
+          ctx.quadraticCurveTo((from + to) / 2 * side + side / 2, up, to * side + toOffset, -10)
+          toArrowX = to * side + toOffset
+        } else {
+          ctx.moveTo(to * side + side / 2, -30)
+          ctx.lineTo(to * side + side / 2, -10)
+          toArrowX = to * side + side / 2
+          arrowAngle = Math.PI/2
+        }
+        if(to < from) {
+          arrowAngle = Math.PI - arrowAngle
+        }
+        draw.arrow(ctx, { x: toArrowX, y: -10 }, arrowAngle)
+      }
+      ctx.stroke()
+    },
 
     mousemove (e) {
       const event = e || event
       this.highlight = null
-      if(this.dragging) {
+      if(this.dragging > 0) {
         const delta = event.offsetX - this.lastX
         this.transMoved += delta
         this.lastX = event.offsetX
@@ -240,18 +297,20 @@ export default {
       const bucket = this.bucketFromMousePos(event)
       if(bucket === null) {
         // dragging outside the box
-        this.dragging = true
-        event.stopPropagation()
+        this.dragging += 1
       } else {
-        event.stopPropagation()
+        this.clickedBucket = bucket
       }
+      event.stopPropagation()
     },
     mouseup (event) {
-      this.dragging = false
+      this.clickedBucket = null
+      if(this.dragging !== 0) {
+        this.dragging -= 1
+      }
       const bucket = this.bucketFromMousePos(event)
       if(bucket !== null) {
         event.stopPropagation()
-        event.preventDefault()
         if(event.button == 0) {
           this.insert(bucket)
         } else {
@@ -297,8 +356,8 @@ export default {
     resetX (event) {
       this.transMoved = 0
     },
-    insertRandom (event) {
-      for(var i=0; i<10; i++) {
+    insertRandom (count) {
+      for(var i=0; i<count; i++) {
         var randomBucket = Math.floor(Math.random() * this.capacity)
         this.insert(randomBucket)
       }

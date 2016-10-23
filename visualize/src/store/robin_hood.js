@@ -26,13 +26,13 @@ class robinHood {
     let pos = hash % this.capacity
     const elemInitial = pos
     while(this.table[pos % this.capacity] !== undefined) {
-      var occupied = this.table[pos % this.capacity]
+      const occupied = this.table[pos % this.capacity]
       // Bitwise, because pos - ousted.pos can be negative.
-      var occupiedInitial = pos - ((pos - occupied.hash) & (this.capacity - 1))
+      const occupiedInitial = pos - ((pos - occupied.hash) & (this.capacity - 1))
       // check if the occupied entry is more fortunate
       if(occupiedInitial > elemInitial) {
         // Begin robin hood
-        this.robinHood(pos, elem, occupiedInitial)
+        this.forwardShift(pos, elem, occupiedInitial)
         return
       }
       pos += 1
@@ -46,9 +46,52 @@ class robinHood {
     this.size += 1
   }
 
+  movesForInsert(hash, elem) {
+    let moves = []
+    if(this.size >= this.capacity * this.load_factor) {
+      const newSize = this.capacity * 2
+      const map = new robinHood(newSize, this.load_factor)
+      for(let i=0; i<this.table.length; i++) {
+        if(this.table[i] !== undefined) {
+          moves = moves.concat(map.movesForInsert(this.table[i].hash, i))
+          map.insert(this.table[i].hash, this.table[i].value)
+        }
+      }
+    }
+    // // remember absolute position.
+    // var elem = null
+    // get relative position.
+    let pos = hash % this.capacity
+    const elemInitial = pos
+    while(this.table[pos % this.capacity] !== undefined) {
+      const occupied = this.table[pos % this.capacity]
+      // Bitwise, because pos - ousted.pos can be negative.
+      const occupiedInitial = pos - ((pos - occupied.hash) & (this.capacity - 1))
+      // check if the occupied entry is more fortunate
+      if(occupiedInitial > elemInitial) {
+        // Begin robin hood forward-shift
+        while(this.table[pos % this.capacity] !== undefined) {
+          moves.push([elem, pos])
+          elem = pos
+          pos += 1
+        }
+        moves.push([elem, pos])
+        return moves
+      }
+      pos += 1
+      // Sanity assert
+      if(pos >= elemInitial + this.size + 1) {
+        // error
+        return []
+      }
+    }
+    moves.push([elem, pos])
+    return moves
+  }
+
   remove(pos) {
     // Back shift.
-    while(this.table[pos + 1] !== undefined && this.table[pos + 1].hash % this.capacity <= pos) {
+    while(this.table[pos + 1] !== undefined && this.table[pos + 1].hash % this.capacity < pos + 1) {
       this.table[pos] = this.table[pos + 1]
       pos += 1
       pos %= this.capacity
@@ -71,9 +114,8 @@ class robinHood {
     this.size = map.size
   }
 
-  robinHood(pos, unbound, currentInitial)
+  forwardShift(pos, unbound, currentInitial) {
     while(this.table[pos % this.capacity] !== undefined) {
-      // forward-shift
       const tmpElem = this.table[pos % this.capacity]
       this.table[pos % this.capacity] = unbound
       unbound = tmpElem
