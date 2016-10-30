@@ -41,4 +41,16 @@ export default {
     ctx.restore()
     // ctx.fillText(next.value.text, i * side + side / 2, side / 2)
   },
+
+  setup (canvas, ctx, transX, transY) {
+    ctx.globalCompositeOperation = 'destination-over'
+    // clear canvas
+    ctx.clearRect(-transX, -transY, canvas.width, canvas.height)
+
+    // drawing code
+    ctx.strokeStyle = "black"
+    ctx.fillStyle = "black"
+    ctx.font = '12pt Calibri'
+    ctx.textAlign = 'center'
+  },
 }

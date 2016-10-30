@@ -125,18 +125,10 @@ export default {
       const canvas = this.$refs.canvas
       if(canvas.getContext) {
         var ctx = canvas.getContext('2d')
-        ctx.canvas.width  = window.innerWidth
-        ctx.canvas.height  = window.innerHeight
+        ctx.canvas.width = window.innerWidth
+        ctx.canvas.height = window.innerHeight
 
-        ctx.globalCompositeOperation = 'destination-over'
-        // clear canvas
-        ctx.clearRect(-this.transX, -this.transY, canvas.width, canvas.height)
-
-        // drawing code
-        ctx.strokeStyle = "black"
-        ctx.fillStyle = "black"
-        ctx.font = '12pt Calibri'
-        ctx.textAlign = 'center'
+        draw.setup(canvas, ctx, this.transX, this.transY)
 
         const firstEntry = this.capacity / 2 - Math.floor(canvas.width / 2 / this.side)
         this.transX = -firstEntry * this.side + this.transMoved
