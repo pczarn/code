@@ -26,26 +26,49 @@ a = 0.95
 
 # (0.4 .. 0.9).step()
 
-def psi_opt(n, a)
+PRECISION1 = 2200
+PRECISION2 = 4000 # 6000
+
+def psi_stable(n, a)
    e = Math::E
 
    p = 1 / a - 1
 
-   q = (1...1500).map {|k|
-      pwr = [(k*a).floor, k+n]
+   q = (1...PRECISION1).map {|k|
+      common = (k*a).floor
       ka_over_e = k*a/e
       ka = k*a
 
-      r = (1..pwr.min).map {|p|
+      r = (1..common).map {|p|
          ka_over_e/p
-      } + (pwr.min+1 .. k+n).map {|p|
+      } + (common+1 .. k+n).map {|p|
          ka/p
       }
 
-      r.reverse.inject(1, :*) * e**-(k*a-pwr.min) * (1 - k*a/(n + k + 1))
+      r.reverse.inject(1, :*) * e**-(k*a - common) * (1 - k*a/(n + k + 1))
    }
 
    p * q.inject(0, :+)
+end
+
+def psi_opt(n, a)
+   e = Math::E
+
+   e_to_minus_a_times_a = BigDecimal::new(e, 5)**(-a) * a
+
+   p = 1 / a - 1
+
+   # q = 1 - lim * a / (lim + n + 1)
+   q = 0
+
+   PRECISION2.downto(1).each {|k|
+      k_ = BigDecimal::new(k)
+      # esp = e_to_minus_a_times_a / (k + n)
+      q = e_to_minus_a_times_a / (k + n) * ((1 - k * a / (k + n + 1)) * k_**(k+n) + q)
+   }
+   p p.class
+
+   p * q * a**n / fact(n)
 end
 
 def psi(n, a)
@@ -62,9 +85,10 @@ def psi(n, a)
    p * q.inject(0, :+)
 end
 
-a = 0.75
+# This load factor
+a = 0.909
 
-prob = 100.times.map {|n| psi_opt(n, a) }
+prob = 129.times.map {|n| psi_opt(n, BigDecimal::new(a, 5)) }
 
 acc = [BigDecimal::new(1)]
 prob_gt = prob.each_with_object(acc) {|elem, acc| acc << acc.last - elem }
@@ -72,9 +96,9 @@ prob_gt = prob.each_with_object(acc) {|elem, acc| acc << acc.last - elem }
 # puts psi_opt2(10, BigDecimal::new(a))
 puts prob_gt.map{|elem| elem.to_f }
 puts
-puts prob
+puts prob.map {|elem| elem.to_f }
 puts
-puts prob.inject(BigDecimal::new(0), :+)
+puts prob.inject(BigDecimal::new(0), :+).to_f
 #, prob.inject(:+), prob[0..3].inject(:+), prob[0..7].inject(:+)
 # puts psi_opt(10, 0.6)
 # puts psi(10, 1, 0.95)
