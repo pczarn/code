@@ -15,30 +15,35 @@ struct MySlice
     size_t len;
 };
 
-void __attribute__ ((noinline))
+// MySlice __attribute__ ((noinline))
+// merge_contiguous() {
+
+// }
 
 int main(int argc, char const *argv[])
 {
     char val_slice[] = {12, 23, 34, 45, 12, 23, 34, 45};
+
     size_t val_slice_len = sizeof(val_slice);
 
-    __asm__ volatile("" : "+r"(val_slice), "+m"(val_slice_len));
+    __asm__ volatile("" : "+m"(val_slice), "+m"(val_slice_len));
 
     char *val_ptr = &val_slice[0];
 
     char *state = val_ptr;
     size_t state_len = 0;
 
-    for(int i = 0; i < val_slice_len; i++) {
-        if(&state[state_len] == val_ptr) {
-            state_len += 1;
-        } else {
-            // read
+    while(val_slice_len--) {
+        state_len += 1;
+        val_ptr++;
+
+        if(&state[state_len] != val_ptr) {
+            // read.
+            // continue
             state = val_ptr;
-            state_len = 1;
+            state_len = 0;
         }   
 
-        val_ptr++;
     }
 
     print(state, state_len);

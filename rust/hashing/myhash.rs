@@ -21,7 +21,8 @@ use self::test::Bencher;
 
 /// A hashable type.
 pub trait Hash<'a> {
-    type Contents: Iterator<Item=&'a u8>;
+    // type Contents: Iterator<Item=&'a u8>;
+    type Contents: Iterator<Item=&'a [u8]>;
     fn as_byte_contents(&self) -> (<Self as Hash>::Contents, usize);
 }
 
