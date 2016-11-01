@@ -25,9 +25,11 @@
       <input type="button" :value="count" @click="insertRandom(count)">
     </template>
     <br>
+    <label for="current-load">Load factor</label>
+    <input type="range" name="current-load" min="0.01" max="1" step="0.01" disabled="disabled" :value="currentLoad">
     <label for="load-factor">Load factor</label>
     <!-- important to have the load factor non-zero and no higher than 1 -->
-    <input type="range" min="0.01" max="1" step="0.01" v-model="loadFactor">
+    <input type="range" name="load-factor" min="0.01" max="1" step="0.01" v-model="loadFactor">
   </div>
 </div>
 </template>
@@ -126,6 +128,9 @@ export default {
       } else {
         return []
       }
+    },
+    currentLoad () {
+      return this.map.size / this.map.capacity
     },
     ...mapGetters(['map', 'capacity']),
   },
