@@ -22,7 +22,7 @@ class robinHood {
   }
 
   insert(hash, value, fromPos) {
-    if(this.size >= this.capacity * this.load_factor) {
+    if(this.size + 1 > this.capacity * this.load_factor) {
       this.resize(this.capacity * 2)
     }
     // remember absolute position.
