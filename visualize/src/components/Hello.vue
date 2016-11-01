@@ -34,6 +34,8 @@
 
 <script>
 import { mapGetters, mapMutations, mapActions } from 'vuex'
+import _ from 'lodash'
+
 import draw from 'src/draw'
 
 const PADDING_TOP = 70
@@ -51,7 +53,7 @@ export default {
       lastX: 0,
       dragging: 0,
       highlight: false,
-      clickedBucket: null,
+      clicked: null,
       msg: 'Hello Vue!',
     }
   },
@@ -112,8 +114,15 @@ export default {
       return this.edges.find(edge => edge.to === this.highlight)
     },
     upArrows () {
-      if(this.clickedBucket) {
-        return this.map.movesForInsert(this.clickedBucket)
+      if(this.clicked) {
+        const map = _.cloneDeep(this.map)
+        map.moves = []
+        if(this.clicked.click === 'left') {
+          map.insert(this.clicked.bucket, null)
+        } else {
+          map.remove(this.clicked.bucket)
+        }
+        return map.moves
       } else {
         return []
       }
@@ -297,12 +306,16 @@ export default {
         // dragging outside the box
         this.dragging += 1
       } else {
-        this.clickedBucket = bucket
+        if(event.button === 0) {
+          this.clicked = { bucket, click: 'left' }
+        } else if(event.button === 2) {
+          this.clicked = { bucket, click: 'right' }
+        }
       }
       event.stopPropagation()
     },
     mouseup (event) {
-      this.clickedBucket = null
+      this.clicked = null
       if(this.dragging !== 0) {
         this.dragging -= 1
       }

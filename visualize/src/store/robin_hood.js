@@ -11,9 +11,17 @@ class robinHood {
     this.table = Array(capacity)
     this.size = 0
     this.load_factor = load_factor
+    this.moves = null
   }
 
-  insert(hash, value) {
+  move(fromPos, toPos, elem) {
+    if(this.moves) {
+      this.moves.push([fromPos, toPos])
+    }
+    Vue.set(this.table, toPos % this.capacity, elem)
+  }
+
+  insert(hash, value, fromPos) {
     if(this.size >= this.capacity * this.load_factor) {
       this.resize(this.capacity * 2)
     }
@@ -32,7 +40,7 @@ class robinHood {
       // check if the occupied entry is more fortunate
       if(occupiedInitial > elemInitial) {
         // Begin robin hood
-        this.forwardShift(pos, elem, occupiedInitial)
+        this.forwardShift(pos, elem, occupiedInitial, fromPos)
         return
       }
       pos += 1
@@ -42,57 +50,14 @@ class robinHood {
         return
       }
     }
-    Vue.set(this.table, pos % this.capacity, elem)
+    this.move(fromPos, pos, elem)
     this.size += 1
-  }
-
-  movesForInsert(hash, elem) {
-    let moves = []
-    if(this.size >= this.capacity * this.load_factor) {
-      const newSize = this.capacity * 2
-      const map = new robinHood(newSize, this.load_factor)
-      for(let i=0; i<this.table.length; i++) {
-        if(this.table[i] !== undefined) {
-          moves = moves.concat(map.movesForInsert(this.table[i].hash, i))
-          map.insert(this.table[i].hash, this.table[i].value)
-        }
-      }
-    }
-    // // remember absolute position.
-    // var elem = null
-    // get relative position.
-    let pos = hash % this.capacity
-    const elemInitial = pos
-    while(this.table[pos % this.capacity] !== undefined) {
-      const occupied = this.table[pos % this.capacity]
-      // Bitwise, because pos - ousted.pos can be negative.
-      const occupiedInitial = pos - ((pos - occupied.hash) & (this.capacity - 1))
-      // check if the occupied entry is more fortunate
-      if(occupiedInitial > elemInitial) {
-        // Begin robin hood forward-shift
-        while(this.table[pos % this.capacity] !== undefined) {
-          moves.push([elem, pos])
-          elem = pos
-          pos += 1
-        }
-        moves.push([elem, pos])
-        return moves
-      }
-      pos += 1
-      // Sanity assert
-      if(pos >= elemInitial + this.size + 1) {
-        // error
-        return []
-      }
-    }
-    moves.push([elem, pos])
-    return moves
   }
 
   remove(pos) {
     // Back shift.
     while(this.table[pos + 1] !== undefined && this.table[pos + 1].hash % this.capacity < pos + 1) {
-      this.table[pos] = this.table[pos + 1]
+      this.move(pos + 1, pos, this.table[pos + 1])
       pos += 1
       pos %= this.capacity
     }
@@ -105,22 +70,26 @@ class robinHood {
 
   resize(newSize) {
     var map = new robinHood(newSize, this.load_factor)
+    map.moves = this.moves
     for(var i=0; i<this.table.length; i++) {
       if(this.table[i] !== undefined) {
-        map.insert(this.table[i].hash, this.table[i].value)
+        map.insert(this.table[i].hash, this.table[i].value, i)
       }
     }
     this.table = map.table
     this.size = map.size
+    this.moves = map.moves
   }
 
-  forwardShift(pos, unbound, currentInitial) {
+  forwardShift(pos, unbound, currentInitial, fromPos) {
     while(this.table[pos % this.capacity] !== undefined) {
       const tmpElem = this.table[pos % this.capacity]
-      this.table[pos % this.capacity] = unbound
+      this.move(fromPos, pos, unbound)
       unbound = tmpElem
+      fromPos = pos
       pos += 1
     }
+    this.move(fromPos, pos, unbound)
     Vue.set(this.table, pos % this.capacity, unbound)
     this.size += 1
   }
