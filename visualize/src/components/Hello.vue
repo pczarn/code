@@ -154,11 +154,12 @@ export default {
         for(let i=first; i<last; i++) {
           ctx.save()
           ctx.translate(i * this.map.capacity * this.side, 0)
-          if(i & 1 == 1) {
-            ctx.strokeStyle = "#dddddd"
-            ctx.fillStyle = "#dddddd"
-          }
           this.drawBuckets(ctx)
+          if(i & 1 == 1) {
+            ctx.globalCompositeOperation = 'source-over'
+            ctx.fillStyle = 'rgba(255,255,255,0.8)'
+            ctx.fillRect(0, -this.transY, this.map.capacity * this.side, ctx.canvas.height)
+          }
           ctx.restore()
         }
       }
