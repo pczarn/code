@@ -1,0 +1,27 @@
+digraph dependencies {
+	//rankdir=LR;
+	bgcolor=transparent;
+	node[style=filled, color=black, fillcolor=white];
+
+	N0[label="load under 20%"];
+	N1[label="load above 20%"];
+	N2[label="reduce displacement, load under 20%"];
+	N3[label="reduce displacement, load above 20%"];
+	N4[label="safe hashing"];
+	N5[style="invis",shape="point"];
+
+	N5 -> N0[label="new HashMap"];
+
+	N0 -> N0[label="modify"];
+	N1 -> N1[label="modify"];
+	N4 -> N4[label="modify"];
+	N0 -> N1[label="insert"];
+	N1 -> N0[label="remove"];
+	N1 -> N3[label="slow insertion",style="dashed"];
+	N0 -> N2[label="slow insertion",style="dotted"];
+	N3 -> N1[label="insert"];
+	N3 -> N0[label="insert"];
+	N3 -> N3[label="remove"];
+	N2 -> N2[label="remove"];
+	N2 -> N4[label="insert"];
+}
